@@ -394,15 +394,23 @@ export async function findDynamicOrderMatches({ userId, sessionId, evidenceText,
     })
       .filter((result) => !result.genderConflict)
       .filter((result) => !result.dobConflict)
-      // The name must agree. With a growing customer base a vendor's file could
-      // otherwise match a stranger on incidental fields — two people sharing a
-      // father's name and a district address is enough for the two-field rule,
-      // and the document would go to the wrong person. A verified application or
-      // birth-registration number is accepted instead, being a unique identifier
-      // stronger than a name.
+      // The name must agree, so a vendor's file cannot reach a stranger who
+      // merely shares a father's name and a district address. Three identifiers
+      // stand in for it:
+      //
+      //  - a verified application or birth-registration number, both unique;
+      //  - an exact date of birth together with gender.
+      //
+      // The last exists because names routinely cannot match across scripts:
+      // customers write in Bangla, certificates are issued in English, and OCR
+      // mangles the Bangla half of a bilingual document ("মেহেদী রহমান" comes
+      // back as "মে হেদী রহেমোন"). A date of birth is script-independent, and
+      // should two customers share one, the tie check downstream refuses the
+      // delivery rather than guessing.
       .filter((result) => result.nameMatch
         || result.matchedFields.includes("applicationId")
-        || result.matchedFields.includes("birthRegistrationNumber"))
+        || result.matchedFields.includes("birthRegistrationNumber")
+        || (result.matchedFields.includes("dob") && result.matchedFields.includes("gender")))
       .filter((result) => result.matchedFields.length >= 2 || (
         filenameExact && (result.matchedFields.includes("applicationId") || result.matchedFields.includes("birthRegistrationNumber"))
       ))

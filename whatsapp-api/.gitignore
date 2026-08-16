@@ -30,8 +30,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files are tracked on purpose — private repo, config ships with the code.
+# See the note in the root .gitignore for what that exposes.
 
 # vercel
 .vercel
