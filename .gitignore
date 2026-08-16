@@ -1,0 +1,52 @@
+# ─── Secrets — never commit ───────────────────────────────────────────────
+# Contain the JWT secret, webhook secret, database URIs, the DeepSeek API key,
+# the n8n encryption key (which decrypts every stored credential) and the
+# Postgres password.
+.env
+.env.*
+!.env.example
+.runner.env
+*.pem
+*.key
+
+# ─── WhatsApp session state ───────────────────────────────────────────────
+# Baileys auth material. Anyone holding these can send messages as the linked
+# account.
+sessions/
+whatsapp-api/sessions/
+auth/
+
+# ─── Customer data ────────────────────────────────────────────────────────
+# Received media is customer documents: birth certificates, NIDs, e-TINs.
+# Never publish these.
+whatsapp-api/public/received_media/
+received_media/
+*.sqlite
+dump/
+backups/
+
+# Real vendor phone numbers (personal data). Ship vendors.example.txt instead.
+vendors.txt
+!vendors.example.txt
+
+# ─── Dependencies and build output ────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.*
+/build
+/coverage
+
+# Python virtualenv and downloaded Whisper models
+.venv-voice/
+.models/
+__pycache__/
+*.pyc
+
+# ─── Local / editor noise ─────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.log
+npm-debug.log*
+yarn-debug.log*
+.trae/

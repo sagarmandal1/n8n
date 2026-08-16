@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin | Revenue Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f3f4f6; }
+        .glass-panel { background: rgba(17,24,39,0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.05); }
+        .stat-card { background: linear-gradient(135deg, rgba(17,24,39,0.9), rgba(31,41,55,0.5)); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 20px; }
+        .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #374151; border-radius: 9999px; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Admin Nav -->
+    <nav class="fixed top-0 w-full z-50 glass-panel border-b border-gray-800">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-rose-500 to-orange-500 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-crown text-white text-sm"></i>
+                    </div>
+                    <span class="text-white font-bold text-lg">Super Admin</span>
+                    <span class="text-xs bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded-full font-semibold">ADMIN</span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <a href="/admin" class="text-gray-400 hover:text-white transition text-sm font-medium"><i class="fas fa-users mr-1"></i> Users</a>
+                    <a href="/admin/revenue" class="text-amber-400 text-sm font-medium"><i class="fas fa-chart-line mr-1"></i> Revenue</a>
+                    <a href="/sessions" class="text-gray-400 hover:text-white transition text-sm font-medium"><i class="fas fa-arrow-left mr-1"></i> User Panel</a>
+                    <button onclick="window.location.href='/api/auth/logout'" class="text-rose-400 hover:text-white hover:bg-rose-500 transition text-sm px-3 py-1.5 rounded-full border border-rose-500/20"><i class="fas fa-sign-out-alt"></i></button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="pt-20 pb-8 max-w-7xl mx-auto px-4 md:px-6">
+        
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-white tracking-tight"><i class="fas fa-chart-line text-amber-400 mr-3"></i>Revenue Dashboard</h1>
+            <p class="text-gray-400 text-sm mt-1">Platform-wide financial and usage statistics.</p>
+        </div>
+
+        <!-- Loading -->
+        <div id="loadingState" class="py-20 text-center text-gray-500">
+            <i class="fas fa-spinner fa-spin text-3xl mb-4"></i>
+            <p>Loading revenue data...</p>
+        </div>
+
+        <div id="mainContent" class="hidden">
+            <!-- KPI Stats -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="stat-card">
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-1">Total Recharges</p>
+                    <p class="text-3xl font-black text-white" id="kpiRevenue">–</p>
+                    <p class="text-xs text-amber-400 mt-1" id="kpiRechargeCount">–</p>
+                </div>
+                <div class="stat-card">
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-1">Subscription Revenue</p>
+                    <p class="text-3xl font-black text-emerald-400" id="kpiSubRev">–</p>
+                    <p class="text-xs text-gray-500 mt-1">From plan purchases</p>
+                </div>
+                <div class="stat-card">
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-1">Active Subscribers</p>
+                    <p class="text-3xl font-black text-indigo-400" id="kpiSubs">–</p>
+                    <p class="text-xs text-gray-500 mt-1" id="kpiNewUsers">–</p>
+                </div>
+                <div class="stat-card">
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-1">Messages Processed</p>
+                    <p class="text-3xl font-black text-violet-400" id="kpiMsgs">–</p>
+                    <p class="text-xs text-gray-500 mt-1" id="kpiReceived">–</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <!-- Transaction History -->
+                <div class="lg:col-span-2 glass-panel rounded-2xl overflow-hidden">
+                    <div class="p-5 border-b border-gray-800 flex items-center justify-between">
+                        <h3 class="font-bold text-white"><i class="fas fa-receipt text-amber-400 mr-2"></i>Recent Transactions</h3>
+                        <span class="text-xs text-gray-500">Last 20</span>
+                    </div>
+                    <div class="overflow-y-auto max-h-80 scrollbar-thin">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left text-xs text-gray-500 uppercase bg-gray-900/50">
+                                    <th class="px-4 py-3 font-semibold">User</th>
+                                    <th class="px-4 py-3 font-semibold">Type</th>
+                                    <th class="px-4 py-3 font-semibold">Amount</th>
+                                    <th class="px-4 py-3 font-semibold">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactionTable" class="divide-y divide-gray-800/50">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Top Users -->
+                <div class="glass-panel rounded-2xl overflow-hidden">
+                    <div class="p-5 border-b border-gray-800">
+                        <h3 class="font-bold text-white"><i class="fas fa-trophy text-amber-400 mr-2"></i>Top Users by Balance</h3>
+                    </div>
+                    <div class="divide-y divide-gray-800/50" id="topUsersList">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadRevenue() {
+            try {
+                const res  = await fetch('/api/admin/revenue');
+                const data = await res.json();
+                if (!data.success) return;
+
+                const r = data.revenue;
+                document.getElementById('kpiRevenue').textContent       = `৳${r.totalRevenue.toLocaleString()}`;
+                document.getElementById('kpiRechargeCount').textContent  = `${r.totalRecharges} total recharge transactions`;
+                document.getElementById('kpiSubRev').textContent         = `৳${r.totalSubscriptionRevenue.toLocaleString()}`;
+                document.getElementById('kpiSubs').textContent           = r.activeSubscribers;
+                document.getElementById('kpiNewUsers').textContent       = `+${r.newUsersWeek} new users this week`;
+                document.getElementById('kpiMsgs').textContent           = r.totalMessages.toLocaleString();
+                document.getElementById('kpiReceived').textContent       = `${r.totalReceived.toLocaleString()} received`;
+
+                // Transaction table
+                const tbody = document.getElementById('transactionTable');
+                tbody.innerHTML = data.recentTransactions.map(tx => `
+                    <tr class="hover:bg-gray-800/30 transition">
+                        <td class="px-4 py-3">
+                            <p class="text-white font-medium">${tx.user?.name || 'Unknown'}</p>
+                            <p class="text-xs text-gray-500">${tx.user?.email || ''}</p>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="text-xs px-2 py-1 rounded-full font-bold ${tx.type === 'credit' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}">
+                                ${tx.type === 'credit' ? '↑ CREDIT' : '↓ DEBIT'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 font-bold ${tx.type === 'credit' ? 'text-emerald-400' : 'text-rose-400'}">
+                            ${tx.type === 'credit' ? '+' : '-'}৳${tx.amount}
+                        </td>
+                        <td class="px-4 py-3 text-gray-500 text-xs">${new Date(tx.createdAt).toLocaleDateString()}<br>${new Date(tx.createdAt).toLocaleTimeString()}</td>
+                    </tr>
+                `).join('');
+
+                // Top users
+                const topList = document.getElementById('topUsersList');
+                topList.innerHTML = data.topUsers.map((u, i) => `
+                    <div class="p-4 hover:bg-gray-800/30 transition flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${i === 0 ? 'bg-amber-500/20 text-amber-400' : i === 1 ? 'bg-gray-400/20 text-gray-400' : 'bg-amber-700/20 text-amber-700'}">
+                            ${i + 1}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-white truncate">${u.name}</p>
+                            <p class="text-xs text-gray-500 truncate">${u.email}</p>
+                        </div>
+                        <span class="text-emerald-400 font-bold text-sm">৳${u.balance}</span>
+                    </div>
+                `).join('');
+
+                document.getElementById('loadingState').classList.add('hidden');
+                document.getElementById('mainContent').classList.remove('hidden');
+
+            } catch(e) {
+                document.getElementById('loadingState').innerHTML = `<p class="text-rose-400">Error: ${e.message}</p>`;
+            }
+        }
+
+        loadRevenue();
+        setInterval(loadRevenue, 30000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+# Local-development overlay. Use with:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+# Production uses docker-compose.yml alone (https behind nginx).
+services:
+  # Postgres is intentionally NOT published to the host: port 5432 is already
+  # taken by another project's container, and n8n reaches it over the compose
+  # network anyway. Inspect it with:
+  #   docker compose exec postgres psql -U n8n -d n8n
+  n8n:
+    environment:
+      # Editor is reached over plain http on localhost, so the https-only
+      # cookie and protocol settings from the production file must be relaxed.
+      N8N_PROTOCOL: http
+      N8N_SECURE_COOKIE: "false"
+      NODE_ENV: development
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mongo_data:

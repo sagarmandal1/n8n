@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Message Inbox</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: radial-gradient(circle at top right, #0d1527, #030712); 
+            color: #f3f4f6; 
+            height: 100vh;
+            overflow: hidden;
+        }
+        .glass-panel { 
+            background: rgba(17, 24, 39, 0.7); 
+            backdrop-filter: blur(16px); 
+            border: 1px solid rgba(255, 255, 255, 0.05); 
+        }
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 9999px; }
+        .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #374151; }
+        
+        .chat-bubble-received {
+            background: #1f2937;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 0px 20px 20px 20px;
+        }
+        .chat-bubble-sent {
+            background: linear-gradient(135deg, #059669, #047857);
+            border-radius: 20px 0px 20px 20px;
+        }
+        .pulse-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .4 } }
+        
+        .active-chat {
+            background: rgba(16, 185, 129, 0.1) !important;
+            border-left: 4px solid #10b981 !important;
+        }
+    </style>
+</head>
+<body class="antialiased flex flex-col">
+
+    <!-- Navigation injected by /js/nav.js -->
+    <script src="/js/nav.js"></script>
+
+    <div class="flex-shrink-0 max-w-7xl w-full mx-auto px-4 md:px-6">
+        <script>injectNav('inbox');</script>
+    </div>
+
+    <!-- Main Workspace Container -->
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 md:px-6 pb-6 overflow-hidden flex flex-col">
+        
+        <!-- Statistics Mini Row -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 flex-shrink-0">
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-gray-800/40">
+                <div>
+                    <p class="text-xs text-gray-500 uppercase font-semibold tracking-wider mb-0.5">Total Received</p>
+                    <p class="text-xl font-bold text-white" id="statTotal">–</p>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400">
+                    <i class="fas fa-inbox text-lg"></i>
+                </div>
+            </div>
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-gray-800/40">
+                <div>
+                    <p class="text-xs text-gray-500 uppercase font-semibold tracking-wider mb-0.5">Today's Inflow</p>
+                    <p class="text-xl font-bold text-emerald-400" id="statToday">–</p>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                    <i class="fas fa-calendar-day text-lg"></i>
+                </div>
+            </div>
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-gray-800/40">
+                <div>
+                    <p class="text-xs text-gray-500 uppercase font-semibold tracking-wider mb-0.5">With Media</p>
+                    <p class="text-xl font-bold text-indigo-400" id="statMedia">–</p>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                    <i class="fas fa-photo-film text-lg"></i>
+                </div>
+            </div>
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-gray-800/40">
+                <div>
+                    <p class="text-xs text-gray-500 uppercase font-semibold tracking-wider mb-0.5">Auto-Response</p>
+                    <p class="text-xl font-bold text-amber-400" id="statReplies">Active</p>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400">
+                    <i class="fas fa-robot text-lg"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Workspace Grid -->
+        <div class="flex-1 glass-panel rounded-3xl overflow-hidden flex border border-gray-800/40">
+            
+            <!-- Left Side: Chat Contacts List -->
+            <div id="chatsSidebar" class="w-full md:w-[380px] border-r border-gray-800/60 flex flex-col bg-gray-950/40">
+                
+                <!-- Filters / Search -->
+                <div class="p-4 border-b border-gray-800/60 flex flex-col gap-3 flex-shrink-0">
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-gray-500 text-sm"></i>
+                        </span>
+                        <input type="text" id="chatSearch" onkeyup="filterChatsList()" placeholder="Search conversations..." class="block w-full pl-10 pr-4 py-2.5 bg-gray-900 border border-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all text-sm">
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        <select id="sessionFilter" onchange="loadInbox()" class="flex-1 bg-gray-900 border border-gray-800 text-gray-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none">
+                            <option value="">All Nodes</option>
+                        </select>
+                        <select id="typeFilter" onchange="loadInbox()" class="bg-gray-900 border border-gray-800 text-gray-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none">
+                            <option value="">All Formats</option>
+                            <option value="text">Text</option>
+                            <option value="image">Image</option>
+                            <option value="video">Video</option>
+                            <option value="audio">Audio</option>
+                            <option value="document">Doc</option>
+                        </select>
+                        <button onclick="loadInbox()" class="p-2 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-gray-400 hover:text-white transition shadow-sm" title="Reload chats">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Scrollable Chats List -->
+                <div id="chatsListContainer" class="flex-1 overflow-y-auto scrollbar-thin divide-y divide-gray-900/60">
+                    <div class="py-20 text-center text-gray-500">
+                        <i class="fas fa-spinner fa-spin text-2xl mb-3 text-emerald-400"></i>
+                        <p class="text-sm">Preparing conversations...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: Chat Message Window -->
+            <div id="chatWindow" class="hidden md:flex flex-1 flex-col bg-gray-950/20 relative">
+                
+                <!-- Chat Window Header -->
+                <div class="p-4 border-b border-gray-800/60 flex items-center justify-between bg-gray-900/20 flex-shrink-0">
+                    <div class="flex items-center gap-3">
+                        <button onclick="backToChatsList()" class="md:hidden text-gray-400 hover:text-white mr-1 text-lg">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <div class="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-sm" id="activeChatAvatar">
+                            C
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-white text-sm md:text-base" id="activeChatTitle">Select a Conversation</h3>
+                            <p class="text-[11px] text-gray-500" id="activeChatSubtitle">Choose a contact on the left to start viewing messages</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <span class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold uppercase tracking-wider">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span> Online Receiver
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Chat History Bubble Pane -->
+                <div id="messagesPane" class="flex-1 p-6 overflow-y-auto scrollbar-thin bg-gray-950/40 flex flex-col gap-4">
+                    <div class="h-full flex flex-col items-center justify-center text-gray-500 text-center py-20">
+                        <i class="fas fa-comments text-5xl mb-4 text-gray-800"></i>
+                        <p class="font-semibold text-gray-400">No Chat Selected</p>
+                        <p class="text-xs mt-1 max-w-[280px]">Select any customer thread from the left menu to view or reply to messages.</p>
+                    </div>
+                </div>
+
+                <!-- Chat Reply Input Field Footer -->
+                <div class="p-4 border-t border-gray-800/60 bg-gray-950/50 flex-shrink-0 hidden flex flex-col gap-2" id="replyFooter">
+                    <!-- Reply Quoted Banner -->
+                    <div id="replyQuotedBanner" class="hidden flex items-center justify-between bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-4 py-2 text-xs text-gray-300">
+                        <div class="flex items-center gap-2 truncate">
+                            <i class="fas fa-reply text-emerald-400"></i>
+                            <div class="truncate">
+                                <span class="text-emerald-400 font-semibold block text-[10px]" id="replyQuotedSender">Replying</span>
+                                <span class="truncate block text-gray-400" id="replyQuotedBody">Message body...</span>
+                            </div>
+                        </div>
+                        <button type="button" onclick="cancelReplyQuote()" class="text-gray-500 hover:text-white p-1 ml-2 transition">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+
+                    <form id="replyForm" onsubmit="handleSendReply(event)" class="flex gap-3">
+                        <input type="text" id="replyInput" placeholder="Type your reply here..." class="flex-1 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all text-sm" required autocomplete="off">
+                        <button type="submit" class="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white px-5 rounded-xl text-sm font-semibold transition-all shadow-md flex items-center justify-center gap-2" id="sendBtn">
+                            <i class="fas fa-paper-plane"></i>
+                            <span class="hidden sm:inline">Send</span>
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification alerts -->
+    <div id="toast" class="fixed bottom-6 right-6 glass-panel border border-emerald-500/20 text-white px-5 py-4 rounded-2xl shadow-2xl z-50 transition-all duration-300 transform translate-y-24 opacity-0 flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400" id="toastIcon">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <div>
+            <h4 class="text-xs font-black uppercase tracking-wider text-emerald-400" id="toastTitle">Notification</h4>
+            <p class="text-xs text-gray-300 mt-0.5" id="toastMsg"></p>
+        </div>
+    </div>
+
+    <script>
+        let chatsMap = {};
+        let activeChatNumber = null;
+        let activeChatSession = null;
+        let messagesData = [];
+        let autoRefreshInterval = null;
+        let activeQuotedMessageId = null;
+
+
+        // Strip any WhatsApp JID suffixes from phone numbers
+        function normalizeNumber(num) {
+            if (!num) return '';
+            return String(num).replace(/@s\.whatsapp\.net|@g\.us|@lid/g, '');
+        }
+
+        // LID numbers are very long (>15 digits) — not a real E.164 phone number
+        function isLidNumber(num) {
+            if (!num) return false;
+            const digits = String(num).replace(/\D/g, '');
+            return digits.length > 15;
+        }
+
+        function showToast(title, msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastTitle = document.getElementById('toastTitle');
+            const toastMsg = document.getElementById('toastMsg');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastTitle.textContent = title;
+            toastMsg.textContent = msg;
+
+            if (type === 'error') {
+                toast.className = toast.className.replace('border-emerald-500/20', 'border-rose-500/20');
+                toastTitle.className = 'text-xs font-black uppercase tracking-wider text-rose-400';
+                toastIcon.className = 'w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-400';
+                toastIcon.innerHTML = '<i class="fas fa-exclamation-circle"></i>';
+            } else {
+                toast.className = toast.className.replace('border-rose-500/20', 'border-emerald-500/20');
+                toastTitle.className = 'text-xs font-black uppercase tracking-wider text-emerald-400';
+                toastIcon.className = 'w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400';
+                toastIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
+            }
+
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-24', 'opacity-0');
+            }, 3500);
+        }
+
+        function getTypeIcon(type) {
+            const map = { 
+                image: 'fa-image text-indigo-400', 
+                video: 'fa-video text-purple-400', 
+                audio: 'fa-microphone text-amber-400', 
+                document: 'fa-file text-blue-400', 
+                sticker: 'fa-sticky-note text-pink-400' 
+            };
+            return map[type] ? `<i class="fas ${map[type]} mr-1"></i>` : '';
+        }
+
+        function timeAgo(dateStr) {
+            const diff = Date.now() - new Date(dateStr).getTime();
+            const s = Math.floor(diff / 1000);
+            if (s < 60) return 'Just now';
+            const m = Math.floor(s / 60);
+            if (m < 60) return `${m}m ago`;
+            const h = Math.floor(m / 60);
+            if (h < 24) return `${h}h ago`;
+            return new Date(dateStr).toLocaleDateString([], { month: 'short', day: 'numeric' });
+        }
+
+        async function loadSessions() {
+            try {
+                const res = await fetch('/api/session/list');
+                const data = await res.json();
+                const sel = document.getElementById('sessionFilter');
+                if (data.sessions) {
+                    data.sessions.forEach(s => {
+                        sel.innerHTML += `<option value="${s._id}">${s._id.slice(-6)} (${s.status})</option>`;
+                    });
+                }
+            } catch(e) {}
+        }
+
+        async function loadInbox() {
+            const sessionId = document.getElementById('sessionFilter').value;
+            const msgType   = document.getElementById('typeFilter').value;
+
+            let url = `/api/session/inbox?page=1&limit=80`;
+            if (sessionId) url += `&session=${sessionId}`;
+            if (msgType)   url += `&msgType=${msgType}`;
+
+            try {
+                const res  = await fetch(url);
+                const data = await res.json();
+
+                if (!data.success) {
+                    document.getElementById('chatsListContainer').innerHTML = `
+                        <div class="py-16 text-center text-rose-400">
+                            <i class="fas fa-exclamation-circle text-2xl mb-3"></i>
+                            <p>${data.error || 'Failed to load'}</p>
+                        </div>`;
+                    return;
+                }
+
+                messagesData = data.messages;
+                document.getElementById('statTotal').textContent = data.total;
+
+                // Stats calculations
+                const todayCount = messagesData.filter(m => new Date(m.createdAt).toDateString() === new Date().toDateString()).length;
+                document.getElementById('statToday').textContent = todayCount;
+
+                const mediaCount = messagesData.filter(m => m.mediaUrl).length;
+                document.getElementById('statMedia').textContent = mediaCount;
+
+                // Group messages by contact (fromNumber)
+                chatsMap = {};
+                messagesData.forEach(m => {
+                    const num = normalizeNumber(m.fromNumber);
+                    if (!num || num === 'unknown') return;
+                    if (!chatsMap[num]) {
+                        chatsMap[num] = {
+                            number: num,
+                            displayName: m.displayName || null,
+                            lastMsg: m.body || 'Media message',
+                            lastDate: m.createdAt,
+                            session: m.session?._id,
+                            sessionStatus: m.session?.status,
+                            msgType: m.msgType
+                        };
+                    } else {
+                        // Keep most recent displayName
+                        if (m.displayName && !chatsMap[num].displayName) {
+                            chatsMap[num].displayName = m.displayName;
+                        }
+                    }
+                });
+
+                renderChatsList();
+            } catch(err) {
+                console.error("Failed to load inbox:", err);
+            }
+        }
+
+        function renderChatsList() {
+            const container = document.getElementById('chatsListContainer');
+            const chats = Object.values(chatsMap).sort((a,b) => new Date(b.lastDate) - new Date(a.lastDate));
+
+            if (chats.length === 0) {
+                container.innerHTML = `
+                    <div class="py-20 text-center text-gray-500">
+                        <i class="fas fa-inbox text-3xl mb-3 text-gray-700"></i>
+                        <p class="text-sm font-medium">Inbox is empty</p>
+                        <p class="text-xs text-gray-600 mt-0.5">Incoming chats will show up here</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = chats.map(c => {
+                const isActive = c.number === activeChatNumber;
+                const isLid = isLidNumber(c.number);
+                const displayNum = c.number.startsWith('+') ? c.number : `+${c.number}`;
+                const avatarInitials = c.displayName
+                    ? c.displayName.charAt(0).toUpperCase()
+                    : c.number.replace(/\D/g, '').slice(-2);
+
+                // For LID: show name only (no number). For real phone: show name + number
+                const topLabel = c.displayName ? c.displayName : displayNum;
+                // Only show phone number below name if it's a real phone (not LID)
+                const subLabel = (!isLid && c.displayName) ? displayNum : null;
+
+                const avatarClass = isLid
+                    ? 'bg-gradient-to-br from-violet-600/30 to-indigo-800/20 border border-violet-500/30 text-violet-300'
+                    : 'bg-gradient-to-br from-emerald-600/30 to-emerald-800/20 border border-emerald-500/30 text-emerald-300';
+
+                const badgeContent = isLid
+                    ? `<span class="text-violet-400">●</span> Multi-Device`
+                    : `Node ···${c.session?.slice(-6) || '–'}`;
+                const badgeClass = isLid ? 'text-violet-500/70' : 'text-gray-500';
+
+                return `
+                    <div onclick="selectChat('${c.number}', '${c.session}')" class="px-4 py-3 cursor-pointer hover:bg-gray-800/30 transition-all flex items-center gap-3 border-l-4 border-transparent ${isActive ? 'active-chat bg-emerald-500/5' : ''}">
+                        <div class="w-11 h-11 rounded-full ${avatarClass} flex items-center justify-center font-bold text-sm flex-shrink-0 select-none">
+                            ${avatarInitials}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-baseline justify-between gap-2">
+                                <span class="text-sm font-semibold text-white leading-tight truncate">${topLabel}</span>
+                                <span class="text-[10px] text-gray-500 flex-shrink-0 whitespace-nowrap">${timeAgo(c.lastDate)}</span>
+                            </div>
+                            ${subLabel ? `<p class="text-[11px] text-gray-400 font-mono mt-0.5">${subLabel}</p>` : ''}
+                            <p class="text-xs text-gray-400 mt-0.5 truncate">
+                                ${getTypeIcon(c.msgType)}${c.lastMsg || 'Media message'}
+                            </p>
+                            <span class="inline-block mt-1 px-2 py-0.5 rounded-full bg-gray-900/80 border border-gray-800/60 text-[9px] ${badgeClass} font-medium tracking-wide">
+                                ${badgeContent}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+        }
+
+        function filterChatsList() {
+            const val = document.getElementById('chatSearch').value.toLowerCase();
+            const cards = document.querySelectorAll('#chatsListContainer > div');
+            cards.forEach(card => {
+                const text = card.textContent.toLowerCase();
+                if (text.includes(val)) {
+                    card.style.display = 'flex';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        async function selectChat(number, sessionId) {
+            activeChatNumber = number;
+            activeChatSession = sessionId;
+
+            // Mark active chat card in list
+            renderChatsList();
+
+            // Setup right chat pane UI
+            if (window.innerWidth < 768) {
+                document.getElementById('chatsSidebar').classList.add('hidden');
+            }
+            document.getElementById('chatWindow').classList.remove('hidden');
+            document.getElementById('chatWindow').classList.add('flex');
+
+            // Resolve display info from chatsMap
+            const contact = chatsMap[number];
+            const displayNum = number.startsWith('+') ? number : `+${number}`;
+            const displayName = contact?.displayName;
+            const avatarLetter = displayName ? displayName.charAt(0).toUpperCase() : number.replace(/\D/g,'').slice(-2);
+
+            document.getElementById('activeChatAvatar').textContent = avatarLetter;
+            document.getElementById('activeChatTitle').textContent = displayName || displayNum;
+            document.getElementById('activeChatSubtitle').textContent = displayName
+                ? `${displayNum} · Node: ${sessionId.slice(-6)}`
+                : `Connected via session node: ${sessionId.slice(-6)}`;
+            document.getElementById('replyFooter').classList.remove('hidden');
+
+            await loadConversationHistory();
+        }
+
+        function backToChatsList() {
+            if (window.innerWidth < 768) {
+                document.getElementById('chatWindow').classList.add('hidden');
+                document.getElementById('chatWindow').classList.remove('flex');
+                document.getElementById('chatsSidebar').classList.remove('hidden');
+            }
+            
+            activeChatNumber = null;
+            activeChatSession = null;
+            renderChatsList();
+        }
+
+        // Escape HTML helper to prevent XSS in quote text
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;")
+                .replace(/`/g, "\\`")
+                .replace(/\n/g, " ");
+        }
+
+        // Quoted message helper actions
+        function setReplyQuote(msgId, sender, text) {
+            activeQuotedMessageId = msgId;
+            document.getElementById('replyQuotedSender').textContent = `Replying to ${sender}`;
+            document.getElementById('replyQuotedBody').textContent = text;
+            document.getElementById('replyQuotedBanner').classList.remove('hidden');
+            document.getElementById('replyInput').focus();
+        }
+
+        function cancelReplyQuote() {
+            activeQuotedMessageId = null;
+            document.getElementById('replyQuotedBanner').classList.add('hidden');
+        }
+
+        async function sendQuickReaction(quotedId, emoji) {
+            if (!activeChatNumber || !activeChatSession) return;
+            try {
+                const res = await fetch(`/api/session/${activeChatSession}/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        number: activeChatNumber,
+                        quotedMessageId: quotedId,
+                        reactionEmoji: emoji
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Reacted', `You reacted with ${emoji}`);
+                    await loadConversationHistory();
+                } else {
+                    showToast('Reaction Failed', data.error || 'Failed to react', 'error');
+                }
+            } catch(e) {
+                showToast('Reaction Failed', 'Connection error', 'error');
+            }
+        }
+
+        async function loadConversationHistory() {
+            if (!activeChatNumber || !activeChatSession) return;
+
+            const pane = document.getElementById('messagesPane');
+            
+            try {
+                const res = await fetch(`/api/session/inbox/conversation?number=${activeChatNumber}&session=${activeChatSession}`);
+                const data = await res.json();
+
+                if (!data.success || data.messages.length === 0) {
+                    pane.innerHTML = `
+                        <div class="h-full flex flex-col items-center justify-center text-gray-500 text-center py-20">
+                            <i class="fas fa-comment-slash text-4xl mb-3 text-gray-700"></i>
+                            <p class="font-medium">No message history</p>
+                        </div>`;
+                    return;
+                }
+
+                function cleanMediaUrl(url) {
+                    if (!url) return '';
+                    return url.replace(/^https?:\/\/[^\/]+/, '');
+                }
+
+                function renderMsgContent(m) {
+                    const body = m.body || '';
+                    const type = m.msgType || 'text';
+                    const raw = m.message || {};
+                    const mediaUrl = cleanMediaUrl(m.mediaUrl);
+
+                    // ── Reaction ──
+                    if (type === 'reaction') {
+                        const emoji = raw?.reactionMessage?.text || body || '👍';
+                        return `<span class="text-2xl" title="Reaction">${emoji}</span>`;
+                    }
+
+                    // ── Quoted / Reply preview ──
+                    let quotedHtml = '';
+                    const quoted = raw?.extendedTextMessage?.contextInfo?.quotedMessage
+                        || raw?.imageMessage?.contextInfo?.quotedMessage
+                        || raw?.videoMessage?.contextInfo?.quotedMessage
+                        || raw?.audioMessage?.contextInfo?.quotedMessage
+                        || raw?.documentMessage?.contextInfo?.quotedMessage;
+                    const quotedParticipant = raw?.extendedTextMessage?.contextInfo?.participant
+                        || raw?.imageMessage?.contextInfo?.participant
+                        || '';
+                    if (quoted) {
+                        const qBody = quoted?.conversation || quoted?.extendedTextMessage?.text
+                            || quoted?.imageMessage?.caption || quoted?.videoMessage?.caption || '📎 Media';
+                        const qName = quotedParticipant.replace(/@.*/, '') || 'Unknown';
+                        quotedHtml = `
+                            <div class="border-l-2 border-emerald-400/60 bg-black/20 rounded px-2 py-1 mb-2 text-xs text-gray-400">
+                                <span class="text-emerald-400 font-semibold block text-[10px]">+${qName}</span>
+                                <span class="truncate block">${qBody.slice(0, 80)}${qBody.length > 80 ? '…' : ''}</span>
+                            </div>`;
+                    }
+
+                    // ── Image ──
+                    if (type === 'image') {
+                        return `${quotedHtml}
+                            ${mediaUrl ? `<img src="${mediaUrl}" alt="Photo" class="max-h-56 w-auto rounded-xl object-cover cursor-pointer hover:opacity-90 transition border border-white/10 shadow-md" onclick="window.open('${mediaUrl}','_blank')">` : '<span class="text-gray-400 italic text-xs">📷 Photo</span>'}
+                            ${body ? `<p class="text-sm mt-1.5 break-words whitespace-pre-wrap leading-relaxed">${body}</p>` : ''}`;
+                    }
+
+                    // ── Video ──
+                    if (type === 'video') {
+                        return `${quotedHtml}
+                            ${mediaUrl
+                                ? `<video src="${mediaUrl}" controls class="max-h-56 w-full rounded-xl border border-white/10 shadow-md" preload="metadata"></video>`
+                                : '<span class="text-gray-400 italic text-xs">🎬 Video</span>'}
+                            ${body ? `<p class="text-sm mt-1.5 break-words">${body}</p>` : ''}`;
+                    }
+
+                    // ── Audio / PTT ──
+                    if (type === 'audio' || type === 'ptt') {
+                        return `${quotedHtml}
+                            ${mediaUrl
+                                ? `<div class="flex items-center gap-2">
+                                    <i class="fas fa-microphone text-emerald-400"></i>
+                                    <audio src="${mediaUrl}" controls class="h-8 max-w-[220px]" style="filter:invert(0.8) sepia(1) hue-rotate(90deg)"></audio>
+                                   </div>`
+                                : '<span class="text-gray-400 italic text-xs">🎵 Voice Message</span>'}`;
+                    }
+
+                    // ── Document ──
+                    if (type === 'document') {
+                        const fname = raw?.documentMessage?.fileName || 'Document';
+                        return `${quotedHtml}
+                            <a href="${mediaUrl || '#'}" target="_blank" class="flex items-center gap-3 px-3 py-2 bg-black/20 rounded-xl border border-white/10 hover:bg-black/30 transition group">
+                                <div class="w-9 h-9 rounded-lg bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                                    <i class="fas fa-file-alt text-indigo-400"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-semibold text-white truncate">${fname}</p>
+                                    <p class="text-[10px] text-gray-400">Document · tap to open</p>
+                                </div>
+                                <i class="fas fa-download text-gray-500 group-hover:text-white transition ml-auto"></i>
+                            </a>`;
+                    }
+
+                    // ── Sticker ──
+                    if (type === 'sticker') {
+                        return `${mediaUrl
+                            ? `<img src="${mediaUrl}" alt="Sticker" class="max-h-28 w-auto object-contain">`
+                            : '<span class="text-2xl">🖼️</span>'}`;
+                    }
+
+                    // ── Location ──
+                    if (type === 'location') {
+                        const lat = raw?.locationMessage?.degreesLatitude;
+                        const lng = raw?.locationMessage?.degreesLongitude;
+                        const name = raw?.locationMessage?.name || 'Location';
+                        return `${quotedHtml}
+                            <a href="https://maps.google.com/?q=${lat},${lng}" target="_blank" class="flex items-center gap-3 px-3 py-2 bg-black/20 rounded-xl border border-white/10 hover:bg-black/30 transition">
+                                <i class="fas fa-map-marker-alt text-red-400 text-lg"></i>
+                                <div>
+                                    <p class="text-xs font-semibold text-white">${name}</p>
+                                    <p class="text-[10px] text-gray-400">Open in Google Maps</p>
+                                </div>
+                            </a>`;
+                    }
+
+                    // ── Default: text ──
+                    return `${quotedHtml}<p class="break-words whitespace-pre-wrap leading-relaxed text-sm">${body || '<span class="text-gray-500 italic">Empty message</span>'}</p>`;
+                }
+
+                pane.innerHTML = data.messages.map(m => {
+                    const isSent = m.direction === 'sent';
+                    const timeStr = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const isReaction = (m.msgType === 'reaction');
+                    const dbId = m._id;
+
+                    if (isReaction) {
+                        return `
+                        <div class="flex ${isSent ? 'justify-end' : 'justify-start'} w-full">
+                            <div class="flex flex-col items-${isSent ? 'end' : 'start'}">
+                                <div class="px-3 py-1 rounded-full bg-gray-900/70 border border-gray-800 shadow-sm flex items-center gap-1.5">
+                                    <span class="text-xl leading-none">${m.message?.reactionMessage?.text || m.body || '👍'}</span>
+                                    <span class="text-[10px] text-gray-500 font-semibold">reacted</span>
+                                </div>
+                                <span class="text-[9px] text-gray-600 mt-0.5 ${isSent ? 'mr-1' : 'ml-1'}">${timeStr}</span>
+                            </div>
+                        </div>`;
+                    }
+
+                    return `
+                    <div class="flex ${isSent ? 'justify-end' : 'justify-start'} w-full relative group/wrap">
+                        <div class="max-w-[72%] md:max-w-[58%] flex flex-col relative">
+                            <div class="px-3.5 py-2.5 shadow-sm ${isSent ? 'chat-bubble-sent text-white' : 'chat-bubble-received text-gray-200'}">
+                                ${renderMsgContent(m)}
+                            </div>
+                            <span class="text-[9px] text-gray-500 mt-0.5 self-end ${isSent ? 'mr-1' : 'ml-1'} flex items-center gap-1">
+                                ${timeStr}
+                                ${isSent ? '<i class="fas fa-check-double text-[8px] text-emerald-400"></i>' : ''}
+                            </span>
+
+                            <!-- Floating Action Bar -->
+                            <div class="absolute ${isSent ? '-left-20' : '-right-20'} top-1/2 -translate-y-1/2 flex items-center gap-2 opacity-0 group-hover/wrap:opacity-100 transition-opacity bg-gray-900 border border-gray-800 rounded-full px-2.5 py-1 shadow-lg z-10">
+                                <button onclick="setReplyQuote('${dbId}', '${isSent ? 'You' : (m.displayName || activeChatNumber)}', \`${escapeHtml(m.body || m.msgType || 'Media')}\`)" class="text-gray-400 hover:text-white transition text-xs" title="Reply">
+                                    <i class="fas fa-reply"></i>
+                                </button>
+                                
+                                <div class="relative group/emoji inline-block">
+                                    <button class="text-gray-400 hover:text-white transition text-xs" title="React">
+                                        <i class="far fa-face-smile"></i>
+                                    </button>
+                                    <div class="absolute bottom-6 ${isSent ? 'left-0' : 'right-0'} hidden group-hover/emoji:flex items-center gap-1.5 bg-gray-900 border border-gray-800 rounded-full px-2.5 py-1 shadow-2xl z-20">
+                                        ${['👍', '❤️', '😂', '😮', '😢', '🙏'].map(emoji => `
+                                            <button onclick="sendQuickReaction('${dbId}', '${emoji}')" class="hover:scale-125 transition text-sm leading-none">${emoji}</button>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+
+                pane.scrollTop = pane.scrollHeight;
+
+            } catch(e) {
+                console.error("Failed to load conversation history:", e);
+            }
+        }
+
+        async function handleSendReply(event) {
+            event.preventDefault();
+            const input = document.getElementById('replyInput');
+            const replyText = input.value.trim();
+            if (!replyText || !activeChatNumber || !activeChatSession) return;
+
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            try {
+                const payload = {
+                    number: activeChatNumber,
+                    message: replyText
+                };
+                if (activeQuotedMessageId) {
+                    payload.quotedMessageId = activeQuotedMessageId;
+                }
+
+                const res = await fetch(`/api/session/${activeChatSession}/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    input.value = '';
+                    cancelReplyQuote();
+                    showToast('Message Sent', `Reply sent successfully to +${activeChatNumber}`);
+                    await loadConversationHistory();
+
+                    if (chatsMap[activeChatNumber]) {
+                        chatsMap[activeChatNumber].lastMsg = replyText;
+                        chatsMap[activeChatNumber].lastDate = new Date().toISOString();
+                        chatsMap[activeChatNumber].msgType = 'text';
+                        renderChatsList();
+                    }
+                } else {
+                    showToast('Send Failed', data.error || 'Check node connection', 'error');
+                }
+            } catch(err) {
+                showToast('Send Failed', 'Network connection error', 'error');
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i> <span class="hidden sm:inline">Send</span>';
+            }
+        }
+
+
+        // Initialize Workspace
+        async function init() {
+            await loadSessions();
+            await loadInbox();
+
+            // Set auto refresh intervals
+            autoRefreshInterval = setInterval(async () => {
+                await loadInbox();
+                if (activeChatNumber) {
+                    await loadConversationHistory();
+                }
+            }, 6000);
+        }
+
+        init();
+    </script>
+</body>
+</html>

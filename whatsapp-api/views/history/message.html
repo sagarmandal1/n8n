@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Message History</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f3f4f6; }
+        .glass-panel { background: rgba(17,24,39,0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.05); }
+        .msg-bubble { background: rgba(17,24,39,0.6); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+        .msg-bubble:hover { background: rgba(31,41,55,0.7); }
+        .type-badge { display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em; }
+    </style>
+</head>
+<body class="antialiased">
+    <!-- Shared Navigation -->
+    <script src="/js/nav.js"></script>
+    <script>injectNav('inbox');</script>
+
+    <div class="pt-24 pb-12 max-w-5xl mx-auto px-4 sm:px-6">
+
+        <div class="messages-container" id="messagesContainer">
+            <div class="loading">Loading messages...</div>
+        </div>
+
+        <div class="footer">
+            Powered by Baileys - Minimal Message History View
+        </div>
+    </div>
+
+    <script>
+        // Get sessionId from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('sessionId');
+
+        if (!sessionId) {
+            document.getElementById('messagesContainer').innerHTML = `
+                <div class="error">
+                    ❌ No session ID provided. Please add ?sessionId=YOUR_SESSION_ID to the URL.
+                </div>
+            `;
+            document.getElementById('sessionInfo').textContent = 'No session ID';
+        } else {
+            document.getElementById('sessionInfo').textContent = `Session: ${sessionId}`;
+            fetchMessages(sessionId);
+        }
+
+        async function fetchMessages(sessionId) {
+            try {
+                // Using relative path - adjust if your API is on a different domain
+                const response = await fetch(`/api/session/${sessionId}/message-history`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.success && data.messages) {
+                    displayMessages(data.messages);
+                } else {
+                    throw new Error('Invalid response format');
+                }
+            } catch (error) {
+                document.getElementById('messagesContainer').innerHTML = `
+                    <div class="error">
+                        ❌ Error loading messages: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function displayMessages(messages) {
+            const container = document.getElementById('messagesContainer');
+            
+            if (!messages || messages.length === 0) {
+                container.innerHTML = '<div class="loading">No messages found</div>';
+                return;
+            }
+
+            // Sort messages by timestamp (oldest first)
+            const sortedMessages = messages
+
+            let html = '';
+            
+            sortedMessages.forEach(msg => {
+                const messageType = getMessageType(msg.message.message);
+                const timestamp = msg.message.messageTimestamp?.low;
+                const date = timestamp ? new Date(timestamp * 1000) : null;
+                const formattedTime = date ? date.toLocaleString() : 'Unknown time';
+                
+                html += `
+                    <div class="message">
+                        <div class="message-header">
+                            <span class="message-type">${messageType}</span>
+                            <span class="message-id">${msg.message.key?.id || 'No ID'}</span>
+                        </div>
+                        
+                        <div class="message-content">
+                            ${getMessageContent(msg.message.message)}
+                        </div>
+                        
+                        <div class="message-header" style="margin-top: 10px; border-top: 1px solid #f0f2f5; padding-top: 8px; margin-bottom: 0;">
+                            <span class="time-badge">
+                                <span class="status-badge status-${msg.message.status || 0}"></span>
+                                Status: ${msg.message.status || 0}
+                            </span>
+                            <span class="message-time">
+                                📅 ${formattedTime}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function getMessageType(message) {
+            if (!message) return 'Unknown';
+            
+            const types = {
+                'conversation': 'Text',
+                'extendedTextMessage': 'Text',
+                'imageMessage': 'Image',
+                'videoMessage': 'Video',
+                'audioMessage': 'Audio',
+                'documentMessage': 'Document',
+                'locationMessage': 'Location',
+                'contactMessage': 'Contact',
+                'pollCreationMessageV3': 'Poll',
+                'reactionMessage': 'Reaction',
+                'protocolMessage': 'Protocol',
+                'stickerMessage': 'Sticker'
+            };
+
+            for (const [key, value] of Object.entries(types)) {
+                if (message[key]) return value;
+            }
+            
+            return 'Other';
+        }
+
+        function getMessageContent(message) {
+            if (!message) return '<i>Empty message</i>';
+
+            // Text messages
+            if (message.conversation) {
+                return `<div class="text-content">💬 ${escapeHtml(message.conversation)}</div>`;
+            }
+            
+            if (message.extendedTextMessage) {
+                return `<div class="text-content">💬 ${escapeHtml(message.extendedTextMessage.text || '')}</div>`;
+            }
+
+            // Media messages
+            if (message.imageMessage) {
+                const img = message.imageMessage;
+                return `
+                    <div>🖼️ Image</div>
+                    ${img.caption ? `<div><i>Caption: ${escapeHtml(img.caption)}</i></div>` : ''}
+                    <div class="media-info">
+                        <p>📏 ${img.width || '?'}x${img.height || '?'}</p>
+                        <p>📁 ${formatBytes(img.fileLength?.low || 0)}</p>
+                        ${img.jpegThumbnail ? '<p>📸 Thumbnail available</p>' : ''}
+                    </div>
+                `;
+            }
+
+            if (message.videoMessage) {
+                const video = message.videoMessage;
+                return `
+                    <div>🎥 Video</div>
+                    ${video.caption ? `<div><i>Caption: ${escapeHtml(video.caption)}</i></div>` : ''}
+                    <div class="media-info">
+                        <p>⏱️ ${video.seconds || 0}s</p>
+                        <p>📁 ${formatBytes(video.fileLength?.low || 0)}</p>
+                        <p>🎞️ ${video.gifPlayback ? 'GIF' : 'Video'}</p>
+                    </div>
+                `;
+            }
+
+            if (message.audioMessage) {
+                const audio = message.audioMessage;
+                return `
+                    <div>🎵 Audio</div>
+                    <div class="media-info">
+                        <p>⏱️ ${audio.seconds || 0}s</p>
+                        <p>📁 ${formatBytes(audio.fileLength?.low || 0)}</p>
+                        <p>${audio.ptt ? '🎤 Voice note' : '🎵 Audio'}</p>
+                    </div>
+                `;
+            }
+
+            // Location
+            if (message.locationMessage) {
+                const loc = message.locationMessage;
+                return `
+                    <div>📍 Location</div>
+                    <div class="media-info">
+                        <p>🌍 ${loc.degreesLatitude || '?'}, ${loc.degreesLongitude || '?'}</p>
+                    </div>
+                `;
+            }
+
+            // Poll
+            if (message.pollCreationMessageV3) {
+                const poll = message.pollCreationMessageV3;
+                let options = '';
+                if (poll.options) {
+                    poll.options.forEach((opt, i) => {
+                        options += `<div class="poll-option">${i+1}. ${escapeHtml(opt.optionName || '')}</div>`;
+                    });
+                }
+                return `
+                    <div>📊 Poll: ${escapeHtml(poll.name || '')}</div>
+                    <div class="poll-options">
+                        ${options}
+                        <div style="margin-top: 5px; color: #666;">Selectable options: ${poll.selectableOptionsCount || 1}</div>
+                    </div>
+                `;
+            }
+
+            // Reaction
+            if (message.reactionMessage) {
+                const reaction = message.reactionMessage;
+                return `
+                    <div class="reaction-badge">👍 Reaction: ${escapeHtml(reaction.text || '')}</div>
+                    <div class="media-info">
+                        <p>To message: ${reaction.key?.id || 'Unknown'}</p>
+                    </div>
+                `;
+            }
+
+            // Protocol message
+            if (message.protocolMessage) {
+                const protocol = message.protocolMessage;
+                return `
+                    <div>🔧 Protocol Message</div>
+                    <div class="protocol-info">
+                        Type: ${protocol.type === 0 ? 'Revoke' : protocol.type}
+                    </div>
+                `;
+            }
+
+            return '<i>Unsupported message type</i>';
+        }
+
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html>

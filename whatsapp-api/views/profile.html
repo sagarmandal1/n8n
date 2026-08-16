@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Profile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f3f4f6; overflow-x: hidden; }
+        .glass-panel { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .alert-container { position: fixed; top: 20px; right: 20px; z-index: 1000; width: 90%; max-width: 400px; }
+        .alert { padding: 16px; border-radius: 12px; margin-bottom: 12px; display: flex; gap: 12px; backdrop-filter: blur(10px); color: white; }
+        .alert-success { background: rgba(16,185,129,0.9); border: 1px solid #10b981; }
+        .alert-error { background: rgba(239,68,68,0.9); border: 1px solid #ef4444; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="antialiased selection:bg-emerald-500/30">
+
+    <div class="alert-container" id="alertContainer"></div>
+
+    <!-- Navigation injected by /js/nav.js -->
+    <script src="/js/nav.js"></script>
+
+    <!-- Main Content -->
+    <div class="pb-12 max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
+        <script>injectNav('profile');</script>
+        
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-white mb-2 tracking-tight">Profile Settings</h1>
+            <p class="text-gray-400 text-sm">Manage your account identity and billing history.</p>
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-8">
+            <!-- Left Info Panel -->
+            <div class="w-full lg:w-1/3 space-y-6">
+                <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8 flex flex-col items-center text-center shadow-xl">
+                    <div id="userAvatar" class="w-24 h-24 bg-gradient-to-br from-emerald-500 to-green-600 rounded-full flex items-center justify-center text-3xl font-bold text-white shadow-lg shadow-emerald-500/20 mb-4 ring-4 ring-gray-900 ring-offset-4 ring-offset-emerald-500/10">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <h2 id="userName" class="text-xl font-bold text-white mb-1 tracking-tight">Loading...</h2>
+                    <p id="userEmail" class="text-gray-400 text-sm mb-6">Loading...</p>
+
+                    <div class="w-full bg-gray-800/50 rounded-2xl p-4 mb-4 text-left border border-gray-700/50">
+                        <p class="text-xs text-gray-500 font-semibold mb-1 uppercase tracking-wider">Username</p>
+                        <p id="userUsername" class="text-gray-300 font-medium">Loading...</p>
+                    </div>
+
+                    <div class="w-full bg-gray-800/50 rounded-2xl p-4 mb-6 text-left border border-gray-700/50">
+                        <p class="text-xs text-gray-500 font-semibold mb-1 uppercase tracking-wider">Account Created</p>
+                        <p id="userCreatedAt" class="text-gray-300 font-medium">Loading...</p>
+                    </div>
+
+                    <div class="w-full bg-gradient-to-br from-emerald-600 to-green-700 rounded-2xl p-6 text-center shadow-lg shadow-emerald-500/20">
+                        <p class="text-emerald-100 text-xs font-semibold uppercase tracking-wider mb-2">Wallet Balance</p>
+                        <h3 class="text-3xl font-bold text-white">৳ <span id="userBalance">0.00</span></h3>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Forms Panel -->
+            <div class="w-full lg:w-2/3">
+                <div class="bg-gray-900 border border-gray-800 rounded-3xl shadow-xl overflow-hidden">
+                    
+                    <!-- Tabs Header -->
+                    <div class="flex border-b border-gray-800 overflow-x-auto">
+                        <button class="tab-btn active px-6 py-4 text-sm font-semibold border-b-2 border-emerald-500 text-emerald-400 transition-colors whitespace-nowrap" data-tab="edit-profile">
+                            <i class="fas fa-user-edit mr-2"></i> Edit Identity
+                        </button>
+                        <button class="tab-btn px-6 py-4 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap" data-tab="change-password">
+                            <i class="fas fa-key mr-2"></i> Security
+                        </button>
+                        <button class="tab-btn px-6 py-4 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap" data-tab="transaction-history">
+                            <i class="fas fa-history mr-2"></i> Billing History
+                        </button>
+                    </div>
+
+                    <div class="p-6 md:p-8">
+                        <!-- Edit Profile -->
+                        <div id="edit-profile" class="tab-content active">
+                            <h3 class="text-lg font-bold text-white mb-6">Update Information</h3>
+                            <form id="editProfileForm" class="space-y-5">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Full Name</label>
+                                        <input type="text" id="editName" required class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all text-sm">
+                                        <p id="nameError" class="validation-error hidden text-rose-400 text-xs mt-2"></p>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Username</label>
+                                        <input type="text" id="editUsername" required class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all text-sm">
+                                        <p id="usernameError" class="validation-error hidden text-rose-400 text-xs mt-2"></p>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Email Address</label>
+                                    <input type="email" id="editEmail" required class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all text-sm">
+                                    <p id="emailError" class="validation-error hidden text-rose-400 text-xs mt-2"></p>
+                                </div>
+                                <div class="flex items-center gap-4 pt-4">
+                                    <button type="submit" id="saveProfileBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2 text-sm">
+                                        <i class="fas fa-save"></i> <span id="saveProfileText">Deploy Changes</span>
+                                    </button>
+                                    <button type="button" onclick="loadProfile()" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-6 py-3 rounded-xl font-semibold transition-all text-sm">Reset</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Change Password -->
+                        <div id="change-password" class="tab-content">
+                            <h3 class="text-lg font-bold text-white mb-6">Authentication Settings</h3>
+                            <form id="changePasswordForm" class="space-y-5">
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Current Password</label>
+                                    <div class="relative">
+                                        <input type="password" id="currentPassword" required class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm">
+                                        <button type="button" onclick="togglePassword('currentPassword', this)" class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"><i class="fas fa-eye"></i></button>
+                                    </div>
+                                    <p id="currentPasswordError" class="validation-error hidden text-rose-400 text-xs mt-2"></p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">New Password</label>
+                                    <div class="relative">
+                                        <input type="password" id="newPassword" required minlength="6" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm">
+                                        <button type="button" onclick="togglePassword('newPassword', this)" class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"><i class="fas fa-eye"></i></button>
+                                    </div>
+                                    <p id="newPasswordError" class="validation-error hidden text-rose-400 text-xs mt-2"></p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Confirm Identity</label>
+                                    <div class="relative">
+                                        <input type="password" id="confirmPassword" required minlength="6" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm">
+                                        <button type="button" onclick="togglePassword('confirmPassword', this)" class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"><i class="fas fa-eye"></i></button>
+                                    </div>
+                                    <p id="confirmPasswordError" class="validation-error hidden text-rose-400 text-xs mt-2"></p>
+                                </div>
+                                <div class="pt-4">
+                                    <button type="submit" id="changePasswordBtn" class="bg-purple-600 hover:bg-purple-500 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2 text-sm">
+                                        <i class="fas fa-key"></i> <span id="changePasswordText">Enforce Password</span>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Billing History -->
+                        <div id="transaction-history" class="tab-content">
+                            <div class="flex justify-between items-center mb-6">
+                                <h3 class="text-lg font-bold text-white">Recent Ledgers</h3>
+                                <div class="flex gap-3 items-center">
+                                    <select id="transactionFilter" onchange="filterTransactions()" class="bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-3 py-2 outline-none">
+                                        <option value="all">All Ledgers</option>
+                                        <option value="credit">Deposits In</option>
+                                        <option value="debit">Allocated Out</option>
+                                    </select>
+                                    <button onclick="loadTransactions()" class="bg-gray-800 border border-gray-700 p-2 rounded-xl text-gray-400 hover:text-white transition-colors"><i class="fas fa-sync-alt"></i></button>
+                                </div>
+                            </div>
+                            
+                            <div id="transactionsList" class="max-h-96 overflow-y-auto bg-gray-800/30 rounded-2xl border border-gray-800">
+                                <div class="flex flex-col items-center justify-center py-12">
+                                    <i class="fas fa-circle-notch fa-spin text-2xl text-emerald-500 mb-3"></i>
+                                    <p class="text-gray-400 text-sm">Decrypting ledgers...</p>
+                                </div>
+                            </div>
+
+                            <div id="transactionSummary" class="hidden mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div class="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                                    <p class="text-xs text-gray-400 uppercase font-semibold mb-1">Total Loaded</p>
+                                    <p class="text-xl font-bold text-emerald-400">৳ <span id="totalCredit">0.00</span></p>
+                                </div>
+                                <div class="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                                    <p class="text-xs text-gray-400 uppercase font-semibold mb-1">Total Spent</p>
+                                    <p class="text-xl font-bold text-rose-400">৳ <span id="totalDebit">0.00</span></p>
+                                </div>
+                                <div class="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                                    <p class="text-xs text-gray-400 uppercase font-semibold mb-1">Net Flow</p>
+                                    <p class="text-xl font-bold text-blue-400">৳ <span id="netChange">0.00</span></p>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allTransactions = [];
+        let filteredTransactions = [];
+
+        // UI Helpers
+        function showAlert(message, type = "info") {
+            const container = document.getElementById("alertContainer");
+            const alertId = "alert-" + Date.now();
+            const alertDiv = document.createElement("div");
+            let icon = type === "success" ? "check-circle" : type === "error" ? "exclamation-circle" : "info-circle";
+            alertDiv.className = `alert ${type === "error" ? "alert-error" : "alert-success"}`;
+            alertDiv.id = alertId;
+            alertDiv.innerHTML = `<i class="fas fa-${icon} mt-1"></i><div class="flex-1 text-sm font-medium pr-8">${message}</div>`;
+            container.appendChild(alertDiv);
+            setTimeout(() => alertDiv.remove(), 4000);
+        }
+
+        function validateEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+        function togglePassword(id, btn) {
+            const input = document.getElementById(id);
+            const icon = btn.querySelector("i");
+            input.type = input.type === "password" ? "text" : "password";
+            icon.className = input.type === "password" ? "fas fa-eye" : "fas fa-eye-slash";
+        }
+
+        // Tab Switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => {
+                    b.classList.remove('active', 'border-emerald-500', 'text-emerald-400');
+                    b.classList.add('border-transparent', 'text-gray-500');
+                });
+                btn.classList.add('active', 'border-emerald-500', 'text-emerald-400');
+                btn.classList.remove('border-transparent', 'text-gray-500');
+
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                const target = document.getElementById(btn.dataset.tab);
+                target.classList.add('active');
+
+                if (btn.dataset.tab === "transaction-history") loadTransactions();
+            });
+        });
+
+        // Load & Save Logic
+        async function loadProfile() {
+            try {
+                const res = await fetch("/api/auth/profile");
+                if (res.ok) {
+                    const { user } = await res.json();
+                    document.getElementById("userName").textContent = user.name;
+                    document.getElementById("userEmail").textContent = user.email;
+                    document.getElementById("userUsername").textContent = user.username;
+                    document.getElementById("userBalance").textContent = user.balance.toFixed(2);
+                    document.getElementById("userAvatar").textContent = user.name.charAt(0).toUpperCase();
+                    
+                    document.getElementById("userCreatedAt").textContent = new Date(user.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+                    
+                    document.getElementById("editName").value = user.name;
+                    document.getElementById("editUsername").value = user.username;
+                    document.getElementById("editEmail").value = user.email;
+                }
+            } catch (error) { showAlert("Network error.", "error"); }
+        }
+
+        async function logout() {
+            try { if ((await fetch("/api/auth/logout")).ok) window.location.href = "/login"; } 
+            catch (error) {}
+        }
+
+        document.getElementById("editProfileForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById("saveProfileBtn");
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing';
+            btn.disabled = true;
+
+            const name = document.getElementById("editName").value;
+            const username = document.getElementById("editUsername").value;
+            const email = document.getElementById("editEmail").value;
+
+            try {
+                const res = await fetch("/api/profile/update", {
+                    method: "PUT", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name, username, email })
+                });
+                const result = await res.json();
+                if (res.ok) {
+                    showAlert("Identity updated successfully", "success");
+                    loadProfile();
+                } else {
+                    showAlert(result.message || "Update failed", "error");
+                }
+            } catch (err) { showAlert("Network error.", "error"); }
+            finally { btn.disabled = false; btn.innerHTML = original; }
+        });
+
+        document.getElementById("changePasswordForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const currentPassword = document.getElementById("currentPassword").value;
+            const newPassword = document.getElementById("newPassword").value;
+            const confirmPassword = document.getElementById("confirmPassword").value;
+            
+            if(newPassword !== confirmPassword) {
+                showAlert("Passwords do not match.", "error"); return;
+            }
+
+            const btn = document.getElementById("changePasswordBtn");
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch("/api/profile/update/password", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ currentPassword, newPassword })
+                });
+                if (res.ok) {
+                    showAlert("Password enforced successfully", "success");
+                    document.getElementById("changePasswordForm").reset();
+                } else {
+                    const result = await res.json();
+                    showAlert(result.message || result.error || "Password change failed", "error");
+                }
+            } catch (err) { showAlert("Network error.", "error"); }
+            finally { btn.disabled = false; btn.innerHTML = original; }
+        });
+
+        // Transactions
+        function renderTransactions() {
+            const container = document.getElementById("transactionsList");
+            if (!filteredTransactions.length) {
+                container.innerHTML = '<div class="py-12 text-center text-gray-500 text-sm">No ledger entries found.</div>';
+                return;
+            }
+            container.innerHTML = filteredTransactions.map(t => {
+                const isCredit = t.type === "credit";
+                return `
+                <div class="flex items-center gap-4 p-4 border-b border-gray-800 last:border-0 hover:bg-gray-800/50 transition-colors">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${isCredit ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}">
+                        <i class="fas ${isCredit ? 'fa-arrow-down' : 'fa-arrow-up'}"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-bold tracking-tight ${isCredit ? 'text-emerald-400' : 'text-rose-400'}">${isCredit ? '+' : '-'}৳ ${t.amount.toFixed(2)}</p>
+                        <p class="text-xs text-gray-400 truncate">${isCredit ? 'Deposit' : 'Spent'} via ${t.by || "System"}</p>
+                    </div>
+                    <div class="text-xs font-semibold text-gray-600 tracking-wider">
+                        ${new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        async function loadTransactions() {
+            try {
+                const res = await fetch("/api/recharge/transactions?limit=50");
+                if (res.ok) {
+                    const data = await res.json();
+                    allTransactions = data.transactions || [];
+                    filteredTransactions = [...allTransactions];
+                    renderTransactions();
+                    
+                    if(allTransactions.length > 0) {
+                        document.getElementById("transactionSummary").classList.remove("hidden");
+                        let cr = 0, db = 0;
+                        allTransactions.forEach(t => t.type === 'credit' ? cr += t.amount : db += t.amount);
+                        document.getElementById("totalCredit").textContent = cr.toFixed(2);
+                        document.getElementById("totalDebit").textContent = db.toFixed(2);
+                        document.getElementById("netChange").textContent = (cr - db).toFixed(2);
+                    }
+                }
+            } catch(e) {}
+        }
+
+        function filterTransactions() {
+            const f = document.getElementById("transactionFilter").value;
+            filteredTransactions = f === "all" ? [...allTransactions] : allTransactions.filter(t => t.type === f);
+            renderTransactions();
+        }
+
+        // Init
+        loadProfile();
+        document.addEventListener("visibilitychange", () => { if (!document.hidden) loadProfile(); });
+    </script>
+</body>
+</html>

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Wallet & Recharge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f3f4f6; overflow-x: hidden; }
+        .glass-panel { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .alert-container { position: absolute; top: -70px; left: 0; width: 100%; z-index: 10; padding: 0 4px;}
+        .alert { padding: 16px; border-radius: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; color: white; animation: fadeIn 0.3s; }
+        .alert-success { background: rgba(16,185,129,0.9); border: 1px solid #10b981; }
+        .alert-error { background: rgba(239,68,68,0.9); border: 1px solid #ef4444; }
+        .alert-info { background: rgba(59,130,246,0.9); border: 1px solid #3b82f6; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Receipt Modal */
+        .modal { backdrop-filter: blur(8px); background: rgba(0, 0, 0, 0.7); }
+        .success-pulse { animation: successPulse 0.5s ease; }
+        @keyframes successPulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+    </style>
+</head>
+<body class="antialiased selection:bg-pink-500/30">
+
+    <!-- Navigation injected by /js/nav.js -->
+    <script src="/js/nav.js"></script>
+
+    <!-- Main Content -->
+    <div class="pt-8 pb-12 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <script>injectNav('wallet');</script>
+        
+        <div class="text-center mb-10">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-pink-500/10 border-2 border-pink-500/30 mb-4 shadow-[0_0_30px_rgba(236,72,153,0.2)]">
+                <i class="fas fa-wallet text-3xl text-pink-500"></i>
+            </div>
+            <h1 class="text-3xl md:text-4xl font-extrabold text-white tracking-tight mb-2">Fund Your Account</h1>
+            <p class="text-gray-400 text-sm md:text-base max-w-xl mx-auto">Fast, secure, and automated top-ups via automated bKash Merchant API integration.</p>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-[2rem] shadow-2xl overflow-hidden relative">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500"></div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-5 h-full">
+                <!-- Left Details / Instructions Panel -->
+                <div class="md:col-span-2 bg-gray-800/30 p-8 border-r border-gray-800 flex flex-col justify-between hidden md:flex">
+                    
+                    <!-- Balance Card -->
+                    <div class="w-full bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 text-center border border-gray-700 relative overflow-hidden shadow-lg mb-8">
+                        <div class="absolute -right-10 -top-10 w-32 h-32 bg-pink-500/10 rounded-full blur-2xl"></div>
+                        <p class="text-gray-400 text-xs font-semibold uppercase tracking-widest mb-2 flex items-center justify-center gap-2"><i class="fas fa-coins text-yellow-500"></i> Available Balance</p>
+                        <h3 class="text-4xl font-black text-white tracking-tight mb-1">৳ <span id="currentBalance">0.00</span></h3>
+                        <p id="balanceTimestamp" class="text-[10px] text-gray-500">Syncing...</p>
+                    </div>
+
+                    <!-- Automated Gateway Info (shown when automated) -->
+                    <div id="leftAutoPanel" class="flex-1 hidden">
+                        <div class="flex items-center gap-3 mb-5">
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white shadow-lg shadow-pink-500/30">
+                                <i class="fas fa-bolt"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-white font-bold tracking-tight">Automated bKash PGW</h4>
+                                <p class="text-xs text-emerald-400 font-semibold">🟢 Live & Secure</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3 mb-6">
+                            <div class="flex items-start gap-3 bg-gray-800/50 rounded-xl p-3">
+                                <div class="w-6 h-6 rounded-full bg-pink-500/20 text-pink-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">1</div>
+                                <p class="text-xs text-gray-300">Enter the amount you want to add to your wallet.</p>
+                            </div>
+                            <div class="flex items-start gap-3 bg-gray-800/50 rounded-xl p-3">
+                                <div class="w-6 h-6 rounded-full bg-pink-500/20 text-pink-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">2</div>
+                                <p class="text-xs text-gray-300">Click <strong class="text-white">Pay with bKash</strong> — you will be redirected to bKash secure checkout.</p>
+                            </div>
+                            <div class="flex items-start gap-3 bg-gray-800/50 rounded-xl p-3">
+                                <div class="w-6 h-6 rounded-full bg-pink-500/20 text-pink-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">3</div>
+                                <p class="text-xs text-gray-300">Enter your bKash number & PIN on bKash's secure page.</p>
+                            </div>
+                            <div class="flex items-start gap-3 bg-gray-800/50 rounded-xl p-3">
+                                <div class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">✓</div>
+                                <p class="text-xs text-gray-300">Balance is updated <strong class="text-emerald-400">instantly</strong> after successful payment.</p>
+                            </div>
+                        </div>
+
+                        <!-- Security badges -->
+                        <div class="flex flex-wrap gap-2 mt-2">
+                            <span class="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full font-semibold flex items-center gap-1"><i class="fas fa-shield-alt text-[10px]"></i> SSL Secured</span>
+                            <span class="text-xs bg-pink-500/10 text-pink-400 border border-pink-500/20 px-2.5 py-1 rounded-full font-semibold flex items-center gap-1"><i class="fas fa-bolt text-[10px]"></i> Instant Credit</span>
+                            <span class="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full font-semibold flex items-center gap-1"><i class="fab fa-buromobelexperte text-[10px]"></i> bKash PGW</span>
+                        </div>
+                    </div>
+
+                    <!-- Manual Gateway Info (shown when manual/no API key) -->
+                    <div id="leftManualPanel" class="flex-1">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-10 h-10 rounded-full bg-pink-500 flex items-center justify-center text-white"><i class="fas fa-mobile-alt"></i></div>
+                            <div>
+                                <h4 class="text-white font-bold tracking-tight">bKash Payment Info</h4>
+                                <p class="text-xs text-gray-400">Send Money to the number below</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4 mb-8">
+                            <div class="flex justify-between items-center text-sm border-b border-gray-700/50 pb-2">
+                                <span class="text-gray-500">bKash Number</span>
+                                <span class="text-white font-mono font-semibold" id="bkashNumberDisplay1">Loading...</span>
+                            </div>
+                            <div class="flex justify-between items-center text-sm border-b border-gray-700/50 pb-2">
+                                <span class="text-gray-500">Method</span>
+                                <span class="text-white font-semibold flex items-center gap-1"><i class="fas fa-mobile-alt text-pink-400 text-xs"></i> Send Money / Payment</span>
+                            </div>
+                        </div>
+
+                        <div class="bg-yellow-900/10 border border-yellow-700/30 rounded-xl p-4">
+                            <h5 class="text-yellow-500 text-sm font-bold flex items-center gap-2 mb-3"><i class="fas fa-info-circle"></i> How to Pay</h5>
+                            <ol class="text-xs text-gray-400 space-y-2 list-decimal list-inside marker:text-yellow-600/50">
+                                <li>Open bKash App or dial <strong>*247#</strong>.</li>
+                                <li><strong>Send Money</strong> to <strong id="bkashNumberDisplay3">Loading...</strong>.</li>
+                                <li>Enter the exact amount.</li>
+                                <li>Save the <strong>TrxID</strong> and enter it below.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- Right Form Panel -->
+                <div class="md:col-span-3 p-8 md:p-10 relative">
+                    
+                    <div id="alertMessage" class="alert-container hidden"></div>
+
+                    <!-- Mobile only balance -->
+                    <div class="md:hidden w-full bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-5 text-center border border-gray-700 shadow-lg mb-8">
+                        <p class="text-gray-400 text-xs font-semibold uppercase tracking-widest mb-1">Available Balance</p>
+                        <h3 class="text-3xl font-black text-white tracking-tight">৳ <span id="currentBalanceMobile">0.00</span></h3>
+                    </div>
+
+                    <form id="rechargeForm" class="space-y-6">
+                        
+                        <div class="space-y-3">
+                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest">Recharge Amount (৳)</label>
+                            <input type="number" id="amount" required min="10" max="100000" step="10" placeholder="Minimum ৳ 10" class="w-full bg-gray-800 border-2 border-gray-700 text-2xl font-bold text-center text-white rounded-xl px-4 py-4 focus:ring-0 focus:border-pink-500 outline-none transition-all pulse-focus placeholder-gray-600 tracking-wider">
+                            
+                            <div class="grid grid-cols-4 sm:grid-cols-4 gap-2 pt-2">
+                                <div class="amount-option bg-gray-800 border border-gray-700 hover:border-pink-500 hover:text-pink-400 text-gray-300 rounded-lg py-2 text-center text-sm font-semibold cursor-pointer transition-colors" data-amount="100">100</div>
+                                <div class="amount-option bg-gray-800 border border-gray-700 hover:border-pink-500 hover:text-pink-400 text-gray-300 rounded-lg py-2 text-center text-sm font-semibold cursor-pointer transition-colors" data-amount="500">500</div>
+                                <div class="amount-option bg-gray-800 border border-gray-700 hover:border-pink-500 hover:text-pink-400 text-gray-300 rounded-lg py-2 text-center text-sm font-semibold cursor-pointer transition-colors" data-amount="1000">1000</div>
+                                <div class="amount-option bg-gray-800 border border-gray-700 hover:border-pink-500 hover:text-pink-400 text-gray-300 rounded-lg py-2 text-center text-sm font-semibold cursor-pointer transition-colors" data-amount="5000">5000</div>
+                            </div>
+                        </div>
+
+                        <!-- MANUAL fields – shown only when automated gateway NOT configured -->
+                        <div id="manualFields" class="space-y-4 hidden">
+                            <div class="space-y-2">
+                                <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest">Sender bKash No.</label>
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500"><i class="fas fa-phone-alt"></i></div>
+                                    <input type="tel" id="bKashNumber" pattern="01[3-9]\d{8}" placeholder="01XXXXXXXXX" class="w-full bg-gray-800 border-2 border-gray-700 text-white font-mono rounded-xl pl-12 pr-4 py-3 focus:ring-0 focus:border-pink-500 outline-none transition-all placeholder-gray-600">
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest">Transaction ID (TrxID)</label>
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500"><i class="fas fa-barcode"></i></div>
+                                    <input type="text" id="transactionId" placeholder="Ex: 9B2XXXXXXX" class="w-full bg-gray-800 border-2 border-gray-700 text-white font-mono uppercase rounded-xl pl-12 pr-4 py-3 focus:ring-0 focus:border-pink-500 outline-none transition-all placeholder-gray-600 tracking-widest">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AUTOMATED bKash PGW info badge -->
+                        <div id="automatedBadge" class="hidden bg-pink-500/10 border border-pink-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
+                            <i class="fas fa-bolt text-pink-400 text-lg"></i>
+                            <div>
+                                <p class="text-white text-sm font-bold">Automated bKash Gateway</p>
+                                <p class="text-gray-400 text-xs">You will be redirected to bKash secure page to complete payment.</p>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 space-y-3">
+                            <button type="submit" id="submitBtn" class="w-full bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white px-6 py-4 rounded-xl font-bold transition-all shadow-lg shadow-pink-500/25 flex justify-center items-center gap-2 text-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                                <i class="fas fa-paper-plane" id="btnIcon"></i> <span id="btnText">Verify & Submit</span>
+                                <i id="btnLoading" class="fas fa-circle-notch fa-spin hidden"></i>
+                            </button>
+                            <button type="button" onclick="window.location.href='/recharge/history'" class="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white px-6 py-3 rounded-xl font-semibold transition-all flex justify-center items-center gap-2 text-sm">
+                                <i class="fas fa-history text-gray-400"></i> View Ledger History
+                            </button>
+                        </div>
+                        
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-10 text-gray-500 text-xs">
+            <p>© 2024 Payment Systems Core. Secured by SSL <i class="fas fa-shield-alt text-emerald-500 ml-1"></i></p>
+        </div>
+    </div>
+
+    <!-- Receipt Modal -->
+    <div id="receiptModal" class="fixed inset-0 modal hidden items-center justify-center z-[100] p-4">
+      <div class="bg-gray-900 rounded-[2rem] p-8 max-w-md w-full border border-gray-800 shadow-2xl relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl"></div>
+        
+        <div class="text-center mb-6 border-b border-gray-800 pb-6 relative z-10">
+            <div class="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-3xl mx-auto mb-4 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]"><i class="fas fa-check"></i></div>
+            <h3 class="text-2xl font-black text-white tracking-tight">Success!</h3>
+            <p class="text-gray-400 text-sm mt-1">Transaction verified & posted.</p>
+        </div>
+        
+        <div class="space-y-3 mb-8 relative z-10 font-mono text-sm">
+            <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-500">TrxID:</span><span class="text-white font-bold" id="receiptTransId">--</span></div>
+            <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-500">Amount:</span><span class="text-emerald-400 font-bold text-lg" id="receiptAmount">--</span></div>
+            <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-500">Sender:</span><span class="text-gray-300" id="receiptBkash">--</span></div>
+            <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-500">Date:</span><span class="text-gray-300 text-xs" id="receiptDate">--</span></div>
+            <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-500">Ref No:</span><span class="text-gray-300" id="receiptRef">--</span></div>
+            <div class="flex justify-between"><span class="text-gray-500">Status:</span><span class="text-emerald-500 uppercase tracking-widest text-xs font-bold">VERIFIED</span></div>
+        </div>
+        
+        <div class="flex gap-3 relative z-10">
+            <button onclick="document.getElementById('receiptModal').classList.add('hidden')" class="flex-1 bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white rounded-xl py-3 font-semibold transition-all shadow text-sm">Dismiss</button>
+            <button onclick="window.print()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl py-3 font-semibold transition-all shadow border border-emerald-500 text-sm"><i class="fas fa-print mr-1"></i> Print</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Script -->
+    <script>
+      // Global state: is bKash Automated PGW active?
+      let IS_AUTOMATED = false;
+
+      function showAlert(message, type) {
+        const ad = document.getElementById("alertMessage");
+        const icon = type === "success" ? "check-circle" : type === "error" ? "exclamation-circle" : "info-circle";
+        ad.className = `alert-container block`;
+        ad.innerHTML = `<div class="alert ${type === "error" ? 'alert-error' : type === 'info' ? 'alert-info' : 'alert-success'} mx-auto max-w-sm shadow-2xl relative"><i class="fas fa-${icon}"></i><span class="font-medium text-sm flex-1">${message}</span></div>`;
+        setTimeout(() => { ad.classList.remove('block'); ad.classList.add('hidden'); }, 5000);
+      }
+
+      async function loadUserInfo() {
+        try {
+          const res = await fetch("/api/auth/profile", { credentials: "include" });
+          if (res.ok) {
+            const data = await res.json();
+            const name = data.user.name || data.user.email || "User";
+            if(document.getElementById("userName")) document.getElementById("userName").textContent = name;
+            
+            if(document.getElementById("userAvatar")) {
+              if (data.user.name) {
+                document.getElementById("userAvatar").innerHTML = data.user.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
+              } else if (data.user.email) {
+                document.getElementById("userAvatar").innerHTML = data.user.email[0].toUpperCase();
+              }
+            }
+
+            const bal = data.user.balance?.toFixed(2) || "0.00";
+            document.getElementById("currentBalance").textContent = bal;
+            if(document.getElementById("currentBalanceMobile")) document.getElementById("currentBalanceMobile").textContent = bal;
+            document.getElementById("balanceTimestamp").textContent = `Sync: ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+            const balNode = document.getElementById("currentBalance");
+            balNode.parentElement.classList.add("success-pulse");
+            setTimeout(() => balNode.parentElement.classList.remove("success-pulse"), 500);
+
+            // Configure the bKash UI based on settings
+            if (data.settings && data.settings.paymentGateway && data.settings.paymentGateway.bKash) {
+                const bkash = data.settings.paymentGateway.bKash;
+                const bkashNum = bkash.username || "Not Configured";
+                if(document.getElementById('bkashNumberDisplay1')) document.getElementById('bkashNumberDisplay1').textContent = bkashNum;
+                if(document.getElementById('bkashNumberDisplay2')) document.getElementById('bkashNumberDisplay2').textContent = bkashNum;
+                if(document.getElementById('bkashNumberDisplay3')) document.getElementById('bkashNumberDisplay3').textContent = bkashNum;
+
+                if (!bkash.isActive) {
+                    // Gateway disabled
+                    const sb = document.getElementById('submitBtn');
+                    sb.disabled = true;
+                    document.getElementById('btnText').textContent = "bKash Gateway Disabled";
+                    document.getElementById('btnIcon').className = "fas fa-ban";
+                    sb.classList.replace('from-pink-600', 'from-gray-600');
+                    sb.classList.replace('to-rose-600', 'to-gray-700');
+                    showAlert("bKash payment gateway is currently disabled by administrators.", "info");
+                } else if (bkash.isAutomated) {
+                    // Automated PGW mode
+                    IS_AUTOMATED = true;
+                    document.getElementById('manualFields').classList.add('hidden');
+                    document.getElementById('automatedBadge').classList.remove('hidden');
+                    document.getElementById('automatedBadge').classList.add('flex');
+                    document.getElementById('btnText').textContent = "Pay with bKash";
+                    document.getElementById('btnIcon').className = "fas fa-bolt";
+                    // Switch left panel
+                    document.getElementById('leftAutoPanel').classList.remove('hidden');
+                    document.getElementById('leftManualPanel').classList.add('hidden');
+                } else {
+                    // Manual mode (gateway active but no API key)
+                    IS_AUTOMATED = false;
+                    document.getElementById('manualFields').classList.remove('hidden');
+                    document.getElementById('automatedBadge').classList.add('hidden');
+                }
+            }
+
+            return true;
+          } else if (res.status === 401) { window.location.href = "/login"; return false; }  
+          return false;
+        } catch (error) { return false; }
+      }
+
+      document.querySelectorAll(".amount-option").forEach(opt => {
+        opt.addEventListener("click", function () {
+          document.querySelectorAll(".amount-option").forEach(o => o.classList.remove("bg-pink-600", "border-pink-500", "text-white"));
+          this.classList.add("bg-pink-600", "border-pink-500", "text-white");
+          document.getElementById("amount").value = this.dataset.amount;
+        });
+      });
+
+      document.getElementById("amount").addEventListener("input", function() {
+          const v = parseFloat(this.value);
+          if (v < 10 || v > 100000) this.classList.add("border-rose-500");
+          else this.classList.remove("border-rose-500");
+      });
+
+      document.getElementById("rechargeForm").addEventListener("submit", async function(e) {
+          e.preventDefault();
+          const amount = document.getElementById("amount").value;
+
+          document.querySelectorAll("input").forEach(i => i.classList.remove("border-rose-500"));
+
+          if (!amount || amount < 10 || amount > 100000) {
+              document.getElementById("amount").classList.add("border-rose-500");
+              showAlert("Amount must be between ৳10 and ৳100,000", "error"); return;
+          }
+
+          const submitBtn = document.getElementById("submitBtn");
+          const btnText = document.getElementById("btnText");
+          const btnLoading = document.getElementById("btnLoading");
+          const btnIcon = document.getElementById("btnIcon");
+          submitBtn.disabled = true;
+          btnText.style.display = "none";
+          btnIcon.style.display = "none";
+          btnLoading.style.display = "inline-block";
+
+          try {
+            if (IS_AUTOMATED) {
+              // ── AUTOMATED bKash PGW ───────────────────────────────────────
+              const res = await fetch("/api/recharge/bkash/create", {
+                  method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+                  body: JSON.stringify({ amount: parseFloat(amount) })
+              });
+              const result = await res.json();
+              if (res.ok && result.bkashURL) {
+                  // Redirect user to bKash checkout page
+                  window.location.href = result.bkashURL;
+              } else {
+                  showAlert(result.error || "Could not initiate bKash payment", "error");
+                  submitBtn.disabled = false;
+                  btnText.style.display = "inline";
+                  btnIcon.style.display = "inline-block";
+                  btnLoading.style.display = "none";
+              }
+            } else {
+              // ── MANUAL bKash TrxID ────────────────────────────────────────
+              const bKashNumber = document.getElementById("bKashNumber").value;
+              const transactionId = document.getElementById("transactionId").value.trim().toUpperCase();
+              let isValid = true;
+              if (!/^01[3-9]\d{8}$/.test(bKashNumber)) {
+                  document.getElementById("bKashNumber").classList.add("border-rose-500");
+                  showAlert("Enter a valid 11-digit bKash number", "error"); isValid = false;
+              }
+              if (!transactionId || transactionId.length < 5) {
+                  document.getElementById("transactionId").classList.add("border-rose-500");
+                  showAlert("Enter a valid TrxID", "error"); isValid = false;
+              }
+              if (!isValid) { submitBtn.disabled = false; btnText.style.display = "inline"; btnIcon.style.display = "inline-block"; btnLoading.style.display = "none"; return; }
+
+              const res = await fetch("/api/recharge/submit", {
+                  method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+                  body: JSON.stringify({ amount: parseFloat(amount), bKashNumber, transactionId })
+              });
+              const result = await res.json();
+
+              if (res.ok) {
+                  showAlert(result.message || "Recharge submitted for approval!", "success");
+                  document.getElementById("receiptTransId").textContent = transactionId;
+                  document.getElementById("receiptAmount").textContent = `৳ ${parseFloat(amount).toFixed(2)}`;
+                  document.getElementById("receiptBkash").textContent = bKashNumber;
+                  document.getElementById("receiptDate").textContent = new Date().toLocaleString();
+                  document.getElementById("receiptRef").textContent = result.data?.recharge?.id || "N/A";
+                  document.getElementById("receiptModal").classList.remove("hidden");
+                  document.getElementById("receiptModal").classList.add("flex");
+                  document.getElementById("rechargeForm").reset();
+                  await loadUserInfo();
+              } else {
+                  let err = "Submission failed";
+                  if (result.error) err = result.error;
+                  else if (res.status === 401) { err = "Please login"; setTimeout(() => window.location.href = "/login", 2000); }
+                  showAlert(err, "error");
+              }
+
+              submitBtn.disabled = false;
+              btnText.style.display = "inline";
+              btnIcon.style.display = "inline-block";
+              btnLoading.style.display = "none";
+            }
+          } catch (error) { 
+            showAlert("Network error.", "error");
+            submitBtn.disabled = false;
+            btnText.style.display = "inline";
+            btnIcon.style.display = "inline-block";
+            btnLoading.style.display = "none";
+          }
+      });
+
+      // Handle bKash redirect callback on page load (?bkash_status=success/failed)
+      function handleBkashCallback() {
+        const params = new URLSearchParams(window.location.search);
+        const status = params.get("bkash_status");
+        if (!status) return;
+
+        // Clean URL
+        history.replaceState({}, document.title, window.location.pathname);
+
+        if (status === "success") {
+          const trxID = params.get("trxID") || "N/A";
+          const amount = params.get("amount") || "?";
+          document.getElementById("receiptTransId").textContent = trxID;
+          document.getElementById("receiptAmount").textContent = `৳ ${parseFloat(amount).toFixed(2)}`;
+          document.getElementById("receiptBkash").textContent = "bKash (Automated)";
+          document.getElementById("receiptDate").textContent = new Date().toLocaleString();
+          document.getElementById("receiptRef").textContent = trxID;
+          document.getElementById("receiptModal").classList.remove("hidden");
+          document.getElementById("receiptModal").classList.add("flex");
+          showAlert("Payment successful! Balance updated.", "success");
+        } else {
+          const msg = params.get("msg") || "Payment failed or cancelled.";
+          showAlert(decodeURIComponent(msg), "error");
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", async function () {
+          await loadUserInfo();
+          document.getElementById("amount").value = 100;
+          document.querySelector('[data-amount="100"]').classList.add("bg-pink-600", "border-pink-500", "text-white");
+          handleBkashCallback();
+          setInterval(loadUserInfo, 30000);
+      });
+    </script>
+</body>
+</html>

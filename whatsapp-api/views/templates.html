@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Message Templates</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f3f4f6; }
+        .glass-panel { background: rgba(17,24,39,0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.05); }
+        .toast { position: fixed; bottom: 20px; right: 20px; background: #1f2937; color: white; padding: 14px 18px; border-radius: 12px; z-index: 9999; transition: transform 0.3s; transform: translateY(150%); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .toast.show { transform: translateY(0); }
+        #templateModal { display:none; }
+        #deleteModal  { display:none; }
+        #deleteModal.show, #templateModal.show { display:flex; }
+        .category-badge { padding: 2px 10px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Navigation injected by /js/nav.js -->
+    <script src="/js/nav.js"></script>
+
+    <div class="pb-8 max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
+        <script>injectNav('templates');</script>
+        
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-white tracking-tight"><i class="fas fa-layer-group text-violet-400 mr-3"></i>Message Templates</h1>
+                <p class="text-gray-400 text-sm mt-1">Save and reuse messages for your campaigns and auto-replies.</p>
+            </div>
+            <button onclick="openModal()" class="bg-gradient-to-r from-violet-500 to-purple-600 text-white px-5 py-2.5 rounded-full text-sm font-bold hover:from-violet-400 hover:to-purple-500 transition shadow-lg shadow-violet-500/25 border border-violet-400 flex items-center gap-2">
+                <i class="fas fa-plus"></i> New Template
+            </button>
+        </div>
+
+        <!-- Templates Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" id="templatesGrid">
+            <div class="col-span-full py-20 text-center text-gray-500">
+                <i class="fas fa-spinner fa-spin text-3xl mb-4"></i>
+                <p>Loading templates...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Template Modal -->
+    <div id="templateModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden">
+            <div class="flex justify-between items-center p-5 border-b border-gray-800">
+                <h2 class="text-lg font-bold text-white" id="modalTitle"><i class="fas fa-layer-group text-violet-400 mr-2"></i>New Template</h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white transition"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <input type="hidden" id="editId">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Template Name</label>
+                    <input type="text" id="tplName" placeholder="e.g. Eid Greeting" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-violet-500 outline-none text-sm placeholder-gray-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Category</label>
+                    <select id="tplCategory" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-violet-500 outline-none">
+                        <option value="general">General</option>
+                        <option value="promotional">Promotional</option>
+                        <option value="transactional">Transactional</option>
+                        <option value="support">Support</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Message Body</label>
+                    <textarea id="tplBody" rows="6" placeholder="Write your message here..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-violet-500 outline-none text-sm resize-y placeholder-gray-500"></textarea>
+                </div>
+                <div class="flex gap-2 text-xs text-gray-500 bg-gray-800/50 rounded-xl p-3 border border-gray-800">
+                    <i class="fas fa-info-circle text-violet-400 mt-0.5"></i>
+                    <span>After saving, click <strong class="text-violet-400">"Use Template"</strong> from the card to auto-fill the Campaign message box.</span>
+                </div>
+            </div>
+            <div class="p-5 border-t border-gray-800 flex justify-end gap-3">
+                <button onclick="closeModal()" class="px-5 py-2.5 rounded-xl text-sm font-bold text-gray-300 bg-gray-800 border border-gray-700 hover:bg-gray-700 transition">Cancel</button>
+                <button id="saveTemplateBtn" onclick="saveTemplate()" class="bg-violet-600 hover:bg-violet-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold border border-violet-500 transition flex items-center gap-2 min-w-[120px] justify-center">
+                    <i class="fas fa-save"></i> Save Template
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirm Modal -->
+    <div id="deleteModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] items-center justify-center">
+        <div class="bg-gray-900 border border-rose-500/30 rounded-2xl p-8 max-w-sm w-full mx-4 shadow-2xl text-center">
+            <div class="w-14 h-14 bg-rose-500/10 border border-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-trash text-rose-400 text-xl"></i>
+            </div>
+            <h3 class="text-white font-bold text-lg mb-2">Delete Template?</h3>
+            <p class="text-gray-400 text-sm mb-6">This template will be permanently removed.</p>
+            <div class="flex gap-3 justify-center">
+                <button id="delCancelBtn" class="px-6 py-2.5 rounded-xl text-sm font-bold text-gray-300 bg-gray-800 border border-gray-700 hover:bg-gray-700 transition">Cancel</button>
+                <button id="delConfirmBtn" class="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-rose-600 hover:bg-rose-500 border border-rose-500 transition">
+                    <i class="fas fa-trash mr-1"></i> Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast min-w-[220px]">
+        <strong id="toastTitle" class="text-sm">Notification</strong>
+        <p id="toastMsg" class="text-xs text-gray-300 mt-0.5"></p>
+    </div>
+
+    <script>
+        const CATEGORY_COLORS = {
+            promotional:  'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+            transactional:'bg-blue-500/10 text-blue-400 border border-blue-500/20',
+            support:      'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+            general:      'bg-gray-500/10 text-gray-400 border border-gray-700',
+        };
+
+        function showToast(title, msg, err=false) {
+            document.getElementById('toastTitle').textContent = title;
+            document.getElementById('toastTitle').className = `text-sm font-semibold ${err ? 'text-rose-400' : 'text-emerald-400'}`;
+            document.getElementById('toastMsg').textContent = msg;
+            const t = document.getElementById('toast');
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function openModal(tpl = null) {
+            document.getElementById('editId').value = tpl?._id || '';
+            document.getElementById('tplName').value = tpl?.name || '';
+            document.getElementById('tplCategory').value = tpl?.category || 'general';
+            document.getElementById('tplBody').value = tpl?.body || '';
+            document.getElementById('modalTitle').innerHTML = tpl
+                ? '<i class="fas fa-edit text-violet-400 mr-2"></i>Edit Template'
+                : '<i class="fas fa-layer-group text-violet-400 mr-2"></i>New Template';
+            const m = document.getElementById('templateModal');
+            m.style.display = 'flex';
+            m.classList.add('show');
+        }
+
+        function closeModal() {
+            const m = document.getElementById('templateModal');
+            m.style.display = 'none';
+            m.classList.remove('show');
+        }
+
+        async function saveTemplate() {
+            const btn = document.getElementById('saveTemplateBtn');
+            const id   = document.getElementById('editId').value;
+            const name = document.getElementById('tplName').value.trim();
+            const body = document.getElementById('tplBody').value.trim();
+            const category = document.getElementById('tplCategory').value;
+
+            if (!name || !body) return showToast('Error', 'Name and message body are required.', true);
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Saving...';
+
+            try {
+                const url    = id ? `/api/template/${id}` : '/api/template';
+                const method = id ? 'PUT' : 'POST';
+                const res    = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, body, category }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Saved', id ? 'Template updated!' : 'Template created!');
+                    closeModal();
+                    loadTemplates();
+                } else {
+                    showToast('Error', data.error || 'Failed to save.', true);
+                }
+            } catch(e) {
+                showToast('Error', 'Network error.', true);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save mr-1"></i> Save Template';
+            }
+        }
+
+        let _pendingDeleteId = null;
+        document.getElementById('delCancelBtn').addEventListener('click', () => {
+            document.getElementById('deleteModal').style.display = 'none';
+            _pendingDeleteId = null;
+        });
+        document.getElementById('delConfirmBtn').addEventListener('click', async () => {
+            if (!_pendingDeleteId) return;
+            document.getElementById('deleteModal').style.display = 'none';
+            try {
+                const res = await fetch(`/api/template/${_pendingDeleteId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Deleted', 'Template removed.');
+                    loadTemplates();
+                } else {
+                    showToast('Error', data.error || 'Delete failed.', true);
+                }
+            } catch(e) {
+                showToast('Error', 'Network error.', true);
+            }
+            _pendingDeleteId = null;
+        });
+
+        window.deleteTemplate = function(id) {
+            _pendingDeleteId = id;
+            document.getElementById('deleteModal').style.display = 'flex';
+        };
+
+        window.editTemplate = function(id) {
+            fetch('/api/template').then(r => r.json()).then(data => {
+                const tpl = data.templates?.find(t => t._id === id);
+                if (tpl) openModal(tpl);
+            });
+        };
+
+        window.useTemplate = async function(id, name, body) {
+            try {
+                await fetch(`/api/template/${id}/use`, { method: 'POST' });
+            } catch(e) {}
+            // Copy to clipboard and redirect to campaigns
+            try { await navigator.clipboard.writeText(body); } catch(e) {}
+            showToast('Copied!', `"${name}" copied to clipboard. Paste in your campaign!`);
+        };
+
+        async function loadTemplates() {
+            try {
+                const res  = await fetch('/api/template');
+                const data = await res.json();
+                const grid = document.getElementById('templatesGrid');
+
+                if (!data.success || !data.templates?.length) {
+                    grid.innerHTML = `
+                        <div class="col-span-full py-20 bg-gray-900 border border-gray-800 rounded-2xl text-center flex flex-col items-center justify-center">
+                            <div class="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mb-4 text-gray-600">
+                                <i class="fas fa-layer-group text-2xl"></i>
+                            </div>
+                            <h3 class="text-white font-bold mb-1">No templates yet</h3>
+                            <p class="text-sm text-gray-500 max-w-xs mb-4">Create reusable message templates to speed up your campaigns.</p>
+                            <button onclick="openModal()" class="text-violet-400 font-medium hover:text-violet-300 transition">
+                                Create First Template <i class="fas fa-arrow-right text-xs ml-1"></i>
+                            </button>
+                        </div>`;
+                    return;
+                }
+
+                grid.innerHTML = data.templates.map(t => `
+                    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition flex flex-col gap-3">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <h3 class="font-bold text-white text-sm mb-1 truncate">${t.name}</h3>
+                                <span class="category-badge ${CATEGORY_COLORS[t.category] || CATEGORY_COLORS.general}">${t.category}</span>
+                            </div>
+                            <div class="flex gap-1.5 flex-shrink-0">
+                                <button onclick="editTemplate('${t._id}')" class="w-8 h-8 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-lg border border-gray-700 flex items-center justify-center transition">
+                                    <i class="fas fa-edit text-xs"></i>
+                                </button>
+                                <button onclick="deleteTemplate('${t._id}')" class="w-8 h-8 bg-gray-800 hover:bg-rose-600 text-gray-400 hover:text-white rounded-lg border border-gray-700 flex items-center justify-center transition">
+                                    <i class="fas fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-400 bg-gray-800/50 rounded-xl p-3 border border-gray-800/80 line-clamp-4 italic flex-1">"${t.body}"</p>
+                        <div class="flex justify-between items-center text-xs text-gray-600">
+                            <span><i class="fas fa-chart-bar mr-1"></i>Used ${t.usageCount} times</span>
+                            <span>${new Date(t.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <button onclick="useTemplate('${t._id}', \`${t.name.replace(/`/g, '')}\`, \`${t.body.replace(/`/g,'').replace(/\n/g,'\\n')}\`)"
+                            class="w-full py-2 rounded-xl text-sm font-bold bg-violet-600/10 hover:bg-violet-600 text-violet-400 hover:text-white border border-violet-500/30 hover:border-violet-500 transition flex items-center justify-center gap-2">
+                            <i class="fas fa-copy"></i> Copy & Use Template
+                        </button>
+                    </div>
+                `).join('');
+            } catch(e) {
+                document.getElementById('templatesGrid').innerHTML = `<div class="col-span-full py-10 text-center text-rose-400">Failed to load templates</div>`;
+            }
+        }
+
+        loadTemplates();
+    </script>
+</body>
+</html>

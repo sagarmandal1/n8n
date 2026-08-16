@@ -1,0 +1,619 @@
+{
+  "id": "deepseekChatStarter",
+  "name": "DeepSeek Advanced Customer Agent",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deepseek-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1111111-1111-4111-8111-111111111111",
+      "webhookId": "c1111111-1111-4111-8111-111111111111",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nconst body = input.body && typeof input.body === 'object' ? input.body : {};\nconst eventData = body.data && typeof body.data === 'object' ? body.data : {};\nconst source = { ...body, ...eventData };\nconst waValue = body.entry?.[0]?.changes?.[0]?.value || {};\nconst waMessage = waValue.messages?.[0] || {};\n\nconst rawCustomerId = source.customer_id ?? source.customerId ?? source.from ?? source.phone ?? waMessage.from ?? input.customer_id ?? input.from ?? '';\nlet customerId = String(rawCustomerId).replace(/\\D/g, '');\nif (customerId.startsWith('01') && customerId.length === 11) customerId = '88' + customerId;\nconst validCustomer = customerId.length >= 7 && customerId.length <= 15;\n\nconst rawMessage = source.message ?? source.text?.body ?? source.text ?? waMessage.text?.body ?? waMessage.button?.text ?? waMessage.interactive?.button_reply?.title ?? waMessage.interactive?.list_reply?.title ?? input.message ?? '';\nconst fullMessage = String(rawMessage).trim();\nconst mediaPayload = Boolean(source.has_media || source.ocr_text || source.ocrText || source.media_url || source.mediaUrl || source.media_type || source.mimeType);\nconst maxMessageLength = mediaPayload ? 12000 : 2000;\nconst message = fullMessage.slice(0, maxMessageLength);\nconst messageId = String(source.message_id ?? source.messageId ?? waMessage.id ?? input.message_id ?? '').trim();\n\n// Check repetitive spam flood\nconst isSpamFlood = /(.)\\1{7,}/i.test(message);\nconst isEmpty = message.length === 0;\nconst isTooLong = fullMessage.length > maxMessageLength;\n\nlet spam_status = 'CLEAN';\nif (isSpamFlood) spam_status = 'SPAM_REPETITIVE';\nelse if (isEmpty) spam_status = 'EMPTY_PAYLOAD';\nelse if (isTooLong) spam_status = 'PAYLOAD_OVERSIZED';\n\nreturn [{\n  json: {\n    ...input,\n    source,\n    body,\n    customerId,\n    validCustomer,\n    rawMessage,\n    fullMessage,\n    mediaPayload,\n    maxMessageLength,\n    message,\n    messageId,\n    spam_status,\n    is_spam: spam_status !== 'CLEAN'\n  }\n}];"
+      },
+      "id": "f1111111-1111-4111-8111-111111111111",
+      "name": "[FILTER 1] Spam & Payload Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nlet text = item.message;\n\n// Dialect Normalization\nconst dialectMap = {\n  'আঁই': 'আমি',\n  'আঁর': 'আমার',\n  'হনেন': 'শুনেন',\n  'হগল': 'সব',\n  'হেইডা': 'সেটা',\n  'মুই': 'আমি',\n  'মোর': 'আমার',\n  'তোগো': 'তোমাদের',\n  'আইজকা': 'আজকে',\n  'কাইলকা': 'কালকে',\n  'কও': 'বল',\n  'কইন': 'বলেন',\n  'কিসেরলাইগা': 'কেন',\n  'ক্যান': 'কেন'\n};\n\nfor (const [dialect, standard] of Object.entries(dialectMap)) {\n  text = text.replace(new RegExp(dialect, 'gu'), standard);\n}\n\n// Banglish Phonetic Token Normalization\nconst lower = text.toLowerCase();\nconst tokens = lower.match(/[a-z0-9]+/g) || [];\nconst tokenSet = new Set(tokens);\nconst containsBengali = /[\\u0980-\\u09ff]/u.test(text);\nconst hasAnyToken = (words) => words.some((word) => tokenSet.has(String(word).toLowerCase()));\n\nconst banglishWords = ['ami', 'amar', 'amader', 'apni', 'apnar', 'ki', 'koto', 'kaj', 'dorkar', 'chai', 'chacchi', 'ase', 'ache', 'nai', 'lagbe', 'bolben', 'diben', 'pathabo', 'kagoj', 'vul', 'thik', 'jonno', 'ektu', 'kora', 'korbo', 'hoy', 'hobe', 'kobe', 'taka', 'dam', 'nam', 'purono', 'eta', 'seta', 'sathe', 'niye', 'jante', 'bujhiye', 'puro', 'poddhoti', 'suru', 'shuru', 'bhai', 'vai', 'parben', 'somoy', 'shomoy', 'online', 'pdf', 'delivery', 'jonmo', 'nibondhon', 'janmo', 'bacha', 'baccha', 'shishu', 'dhaka', 'city', 'zone', 'sonshodhon', 'shongshodhon', 'ctg', 'chittagong', 'chattogram', 'mongolbar', 'tuesday', 'seller', 'vendor', 'file', 'customer', 'din', '1din', '2002', '2012', 'passport', 'nid'];\nconst grammarWords = ['i', 'we', 'you', 'my', 'our', 'your', 'the', 'am', 'is', 'are', 'was', 'were', 'do', 'does', 'can', 'could', 'would', 'will', 'what', 'which', 'where', 'when', 'why', 'how', 'need', 'want', 'please', 'help', 'tell', 'provide'];\nconst grammarScore = tokens.filter((token) => grammarWords.includes(token)).length;\n\nlet replyLanguage = 'bn';\nif (item.source.reply_language === 'en' || item.source.reply_language === 'bn') {\n  replyLanguage = item.source.reply_language;\n} else if (containsBengali || hasAnyToken(banglishWords)) {\n  replyLanguage = 'bn';\n} else if (tokens.length >= 3 && grammarScore >= 1) {\n  replyLanguage = 'en';\n}\n\nreturn [{\n  json: {\n    ...item,\n    normalized_message: text,\n    reply_language: replyLanguage,\n    tokens,\n    tokenSet: Array.from(tokenSet)\n  }\n}];"
+      },
+      "id": "f2222222-2222-4222-8222-222222222222",
+      "name": "[FILTER 2] Dialect & Phonetic Normalizer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nconst message = item.normalized_message;\nconst lower = message.toLowerCase();\n\n// Deep Security & Jailbreak Inspection\nconst injectionPhrases = ['ignore previous', 'ignore all instructions', 'system prompt', 'developer message', 'jailbreak', 'reveal instructions', 'system password', 'আগের নির্দেশনা ভুলে'];\nconst isPromptInjection = injectionPhrases.some(p => lower.includes(p));\n\n// Sensitive & Risky Keywords\nconst riskyPhrases = ['payment dispute', 'payment problem', 'account hacked', 'money back', 'fake service'];\nconst riskyTokens = ['refund', 'rifand', 'ferot', 'complaint', 'ovijog', 'scam', 'fraud', 'legal', 'ain', 'case', 'mamla', 'medical', 'doctor', 'hacked'];\nconst riskyBengali = ['ফেরত', 'অভিযোগ', 'প্রতারণা', 'আইন', 'মামলা', 'পেমেন্ট সমস্যা', 'হ্যাক', 'টাকা ফেরত'];\n\nconst isRisky = riskyPhrases.some(p => lower.includes(p)) || riskyTokens.some(t => item.tokenSet.includes(t)) || riskyBengali.some(b => message.includes(b));\nconst customerRef = item.validCustomer ? '***' + item.customerId.slice(-4) : '';\n\nreturn [{\n  json: {\n    ...item,\n    is_prompt_injection: isPromptInjection,\n    is_risky: isRisky,\n    customer_ref: customerRef\n  }\n}];"
+      },
+      "id": "f3333333-3333-4333-8333-333333333333",
+      "name": "[FILTER 3] PII Privacy & Security Shield",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nconst message = item.normalized_message;\nconst lower = message.toLowerCase();\nconst tokenSet = new Set(item.tokenSet || []);\n\n// Urgency Indicators\nconst urgentTokens = ['urgent', 'emergency', 'khub', 'taratari', 'ajkei', 'ekhoni', 'druto', 'জরুরি', 'তাড়াতাড়ি', 'আজকেই', 'এখনই', 'দ্রুত'];\nconst isUrgent = urgentTokens.some(t => lower.includes(t));\n\n// Sentiment Analysis\nlet sentiment = 'neutral';\nconst negativeTokens = ['angry', 'bad', 'kharap', 'faltu', 'baje', 'cheat', 'scam', 'fraud', 'chor', 'dhoka', 'rag', 'ovijog', 'ferot'];\nconst positiveTokens = ['thanks', 'dhonnobad', 'valo', 'good', 'great', 'shundor', 'bhalo', 'satisfied'];\nif (negativeTokens.some(t => tokenSet.has(t)) || ['বাজে', 'খারাপ', 'প্রতারক', 'ধোঁকা', 'রাগ', 'অভিযোগ'].some(b => message.includes(b))) {\n  sentiment = 'negative';\n} else if (positiveTokens.some(t => tokenSet.has(t)) || ['ধন্যবাদ', 'ভালো', 'সুন্দর'].some(b => message.includes(b))) {\n  sentiment = 'positive';\n}\n\n// VIP Lead Scoring\nlet urgency_score = isUrgent ? 9 : (sentiment === 'negative' ? 8 : 5);\nlet lead_tier = 'STANDARD_INQUIRY';\nif (lower.includes('payment') || lower.includes('paid') || lower.includes('trx') || lower.includes('টাকা')) {\n  lead_tier = 'HOT_PAYMENT_LEAD';\n  urgency_score = 10;\n} else if (isUrgent) {\n  lead_tier = 'VIP_URGENT_LEAD';\n} else if (sentiment === 'negative') {\n  lead_tier = 'CRITICAL_ATTENTION';\n}\n\n// Target Service Package Classification\nlet service_category = 'General Digital Consultation & Payment';\nlet service_code = 'SRV_GENERAL';\nlet digital_delivery_time = 'Instant / Online PDF Delivery';\nlet specialist_persona = 'digital_service_specialist';\n\nconst isCtg = lower.includes('ctg') || lower.includes('chittagong') || lower.includes('chattogram') || lower.includes('চট্টগ্রাম');\nconst isDhaka = lower.includes('dhaka') || lower.includes('ঢাকা');\nconst isCorrection = lower.includes('সংশোধন') || lower.includes('correction') || lower.includes('vul') || lower.includes('ভুল') || lower.includes('thik') || lower.includes('ঠিক');\n\nif (lower.includes('birth') || lower.includes('jonmo') || lower.includes('janmo') || lower.includes('জন্ম') || lower.includes('নিবন্ধন') || lower.includes('nibondhon') || lower.includes('বাচ্চা') || lower.includes('shishu')) {\n  if (isCtg && !isCorrection) {\n    service_category = 'Chattogram City New Birth Registration (চট্টগ্রাম সিটি নতুন নিবন্ধন - প্রতি মঙ্গলবার)';\n    service_code = 'SRV_CTG_NEW_BIRTH';\n    digital_delivery_time = 'Every Tuesday (প্রতি মঙ্গলবার অনলাইন প্রসেস ও WhatsApp PDF)';\n    specialist_persona = 'ctg_birth_specialist';\n  } else if (isCtg && isCorrection) {\n    service_category = 'Chattogram City Birth Correction (চট্টগ্রাম সিটি জন্ম নিবন্ধন সংশোধন)';\n    service_code = 'SRV_CTG_CORRECTION';\n    digital_delivery_time = '2-5 Working Days (Official WhatsApp PDF Delivery)';\n    specialist_persona = 'ctg_birth_specialist';\n  } else if (isDhaka && isCorrection || isCorrection) {\n    service_category = 'Dhaka City Birth Correction (ঢাকা সিটি জন্ম নিবন্ধন যেকোনো সংশোধন)';\n    service_code = 'SRV_DHAKA_CORRECTION';\n    digital_delivery_time = '2-4 Working Days (Official WhatsApp PDF Delivery)';\n    specialist_persona = 'dhaka_birth_specialist';\n  } else {\n    service_category = 'Dhaka City New Birth Registration (ঢাকা সিটি নতুন জন্ম নিবন্ধন - ১ দিনে ডেলিভারি)';\n    service_code = 'SRV_DHAKA_NEW_BIRTH_1DAY';\n    digital_delivery_time = '১ দিন (২৪ ঘণ্টার মধ্যে সরাসরি WhatsApp-এ অফিশিয়াল PDF সনদ)';\n    specialist_persona = 'dhaka_birth_specialist';\n  }\n} else if (lower.includes('tin') || lower.includes('টিন') || lower.includes('tax') || lower.includes('রিটার্ন')) {\n  service_category = 'e-TIN & Tax Return Services';\n  service_code = 'SRV_ETIN';\n  digital_delivery_time = '15-30 Minutes (WhatsApp PDF)';\n  specialist_persona = 'document_specialist';\n} else if (lower.includes('nid') || lower.includes('ভোটার')) {\n  service_category = 'NID & Voter Services';\n  service_code = 'SRV_NID';\n  digital_delivery_time = '3-7 Working Days (WhatsApp PDF)';\n  specialist_persona = 'document_specialist';\n} else if (lower.includes('trade') || lower.includes('ট্রেড') || lower.includes('লাইসেন্স') || lower.includes('business')) {\n  service_category = 'Trade License & Business Registration';\n  service_code = 'SRV_TRADE';\n  digital_delivery_time = '1-2 Working Days (WhatsApp PDF)';\n  specialist_persona = 'sales_specialist';\n}\n\nreturn [{\n  json: {\n    ...item,\n    sentiment,\n    urgency_score,\n    lead_tier,\n    is_urgent: isUrgent,\n    service_category,\n    service_code,\n    digital_delivery_time,\n    specialist_persona\n  }\n}];"
+      },
+      "id": "f4444444-4444-4444-8444-444444444444",
+      "name": "[FILTER 4] Urgency, VIP & Service Package Injector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ (function() {\n  if (!$json.validCustomer || $json.is_spam || $json.is_prompt_injection || $json.is_risky || $json.requires_human_review) return false;\n  const msg = ($json.normalized_message || '').toLowerCase();\n  if (msg.length <= 40 && (msg.includes('hi') || msg.includes('hello') || msg.includes('salam') || msg.includes('সালাম'))) return false;\n  if (msg.length <= 60 && (msg.includes('দাম') || msg.includes('খরচ') || msg.includes('price')) && $json.service_code === 'SRV_GENERAL') return false;\n  return true;\n})() }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "a3333333-3333-4333-8333-333333333333",
+      "name": "Needs DeepSeek AI?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Customer number: ' + $json.customerId + '\\nRequired reply language:\\n' + ($json.reply_language === 'en' ? 'English only' : 'Bengali script only') + '\\n\\nTarget Service Package:\\n' + $json.service_category + ' (Estimated Delivery: ' + $json.digital_delivery_time + ')\\n\\nCustomer Lead Tier & Sentiment:\\n' + $json.lead_tier + ' | Sentiment: ' + $json.sentiment + '\\n\\nExtracted entities:\\n' + JSON.stringify($json.entities || {}) + '\\n\\nMissing information / match readiness:\\n' + JSON.stringify($json.match_readiness || {}) + '\\n\\nAuthoritative live CRM/order/OCR/payment/service analysis:\\n' + JSON.stringify($json.live_analysis || {}) + '\\n\\nCustomer message and OCR/transcription content:\\n' + $json.normalized_message + '\\n\\nVerified Business Context:\\n' + JSON.stringify($json.body?.business_context ?? {}) + '\\n\\nCustomer CRM Context supplied by caller:\\n' + JSON.stringify($json.body?.crm_context ?? {}) + '\\n\\nConversation History supplied by caller:\\n' + JSON.stringify($json.body?.crm_context?.conversationHistory ?? []) }}",
+        "hasOutputParser": false,
+        "options": {
+          "systemMessage": "You are a real, friendly human customer specialist assisting clients on WhatsApp (not a robotic AI). Speak warmly, respectfully and naturally like an experienced support person in Bangladesh.\n\nCore Business Rules for Birth Certificates:\n1. Dhaka City New Birth Registration: Done in just 1 DAY (১ দিনেই কাজ ডেলিভারি)।\n2. Birth Registration Requirements by Year:\n   - Born BEFORE 2002: নিজের NID বা পাসপোর্ট লাগবে (অনলাইন জন্ম সনদ হলেও হবে)।\n   - Born between 2002 and 2012: পিতা ও মাতার NID কার্ড হলেই চলবে।\n   - Born AFTER 2012 (ছোট বাচ্চা): পিতা ও মাতার NID কার্ড এবং পিতা-মাতার অনলাইন জন্ম নিবন্ধন সনদ দুটোই লাগবে, সাথে বাচ্চার টিকা কার্ড।\n3. Dhaka City Corrections: Any corrections (name, age, parents names) processed daily in 2-4 days.\n4. Chattogram City: Corrections daily; New Birth Registration processed STRICTLY ON TUESDAYS (প্রতি মঙ্গলবার).\n5. Delivery: 100% online official PDF document delivered directly via WhatsApp.\n6. Style: Natural, human conversational Bengali. No robotic phrases, no numbered lists, no markdown bullets/bold, no emoji. Keep responses under 300 Unicode characters in 1-3 short complete sentences.\n\nLive-context policy:\n- The Authoritative live analysis is already loaded before you answer. Use its order status, history, role, service, payment and document decision as facts.\n- Never approve delivery unless documentAssessment.autoDeliver=true and decision=UNIQUE_MATCH.\n- Only payment.status=VERIFIED means paid.\n- If live analysis is unavailable, ambiguous, conflicting, unverified or missing required information, do not guess; request the missing information or route to human review.",
+          "enableStreaming": false
+        }
+      },
+      "id": "a4444444-4444-4444-8444-444444444444",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        2480,
+        -160
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": "deepseek-v4-flash",
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 300,
+          "timeout": 120000,
+          "maxRetries": 1
+        }
+      },
+      "id": "a8888888-8888-4888-8888-888888888888",
+      "name": "DeepSeek Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatDeepSeek",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        240
+      ],
+      "credentials": {
+        "deepSeekApi": {
+          "id": "b4f9933f-7efb-4938-985e-c0de0d5e0001",
+          "name": "DeepSeek API - WhatsApp Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'whatsapp:' + ($json.source?.session_id || $json.source?.sessionId || 'direct') + ':' + $json.customerId }}",
+        "tableName": "deepseek_customer_chat_memory",
+        "contextWindowLength": 15
+      },
+      "id": "a9999999-9999-4999-8999-999999999999",
+      "name": "Postgres Customer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.4,
+      "position": [
+        1560,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgMemoryWhatsAppAgent01",
+          "name": "Postgres Memory - WhatsApp Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $input.first().json;\nconst routed = $('Needs DeepSeek AI?').first().json;\nconst english = routed.reply_language === 'en';\nconst languageFallback = english\n  ? 'Thank you for your message. Please share which online service you need, and our team will confirm the required documents, fee and expected completion time.'\n  : 'আপনার বার্তার জন্য ধন্যবাদ। কোন অনলাইন সেবাটি নিতে চান জানালে প্রয়োজনীয় কাগজপত্র, খরচ ও সম্ভাব্য ডেলিভারির সময় জানিয়ে দেব।';\nconst failureFallback = english\n  ? 'Sorry, our automated service is temporarily busy. A team member will review your message and reply via WhatsApp as soon as possible.'\n  : 'দুঃখিত, আমাদের সাপোর্ট টিম একটু ব্যস্ত। কিছুক্ষণের মধ্যেই আপনার মেসেজ দেখে WhatsApp-এ উত্তর দিচ্ছি।';\n\nconst sanitizeReply = (value) => String(value || '')\n  .replace(/\\*\\*(.*?)\\*\\*/gu, '$1')\n  .replace(/^\\s{0,3}#{1,6}\\s*/gmu, '')\n  .replace(/^\\s*(?:[-*•]|📌|\\d+[.)])\\s*/gmu, '')\n  .replace(/\\n{3,}/gu, '\\n\\n')\n  .trim();\n\nconst enforceLanguage = (value) => {\n  let clean = sanitizeReply(value);\n  if (english) return /[\\u0980-\\u09ff]/u.test(clean) ? languageFallback : clean;\n\n  const officialTerms = [\n    ['e-TIN', '__OFFICIAL_ETIN__'],\n    ['bKash', '__OFFICIAL_BKASH__'],\n    ['Nagad', '__OFFICIAL_NAGAD__'],\n    ['NID', '__OFFICIAL_NID__'],\n    ['TIN', '__OFFICIAL_TIN__'],\n    ['PDF', '__OFFICIAL_PDF__'],\n    ['OTP', '__OFFICIAL_OTP__'],\n    ['SMS', '__OFFICIAL_SMS__'],\n    ['WhatsApp', '__OFFICIAL_WA__'],\n    ['TrxID', '__OFFICIAL_TRXID__'],\n    ['Dhaka', '__OFFICIAL_DHAKA__'],\n    ['Chattogram', '__OFFICIAL_CTG__'],\n    ['CTG', '__OFFICIAL_CTG__'],\n    ['City', '__OFFICIAL_CITY__'],\n    ['Tuesday', '__OFFICIAL_TUESDAY__']\n  ];\n  for (const [term, placeholder] of officialTerms) {\n    clean = clean.replace(new RegExp(term, 'giu'), placeholder);\n  }\n\n  const commonReplacements = {\n    needed: 'প্রয়োজন',\n    need: 'প্রয়োজন',\n    document: 'কাগজপত্র',\n    documents: 'কাগজপত্র',\n    certificate: 'সনদ',\n    certificates: 'সনদ',\n    service: 'সেবা',\n    services: 'সেবা',\n    process: 'প্রক্রিয়া',\n    price: 'মূল্য',\n    cost: 'খরচ',\n    time: 'সময়',\n    team: 'দল',\n    payment: 'টাকা',\n    status: 'অবস্থা',\n    file: 'কাগজপত্র',\n    files: 'কাগজপত্র',\n    form: 'ফরম',\n    online: 'অনলাইন',\n    representative: 'প্রতিনিধি'\n  };\n  for (const [source, replacement] of Object.entries(commonReplacements)) {\n    clean = clean.replace(new RegExp('\\\\b' + source + '\\\\b', 'giu'), replacement);\n  }\n  clean = clean\n    .replace(/ডকুমেন্ট(?:স)?/gu, 'কাগজপত্র')\n    .replace(/সার্টিফিকেট/gu, 'সনদ')\n    .replace(/হেল্প/gu, 'সাহায্য');\n\n  for (const [term, placeholder] of officialTerms) {\n    clean = clean.replaceAll(placeholder, term);\n  }\n  return clean || languageFallback;\n};\n\nconst limitReply = (value, maxCharacters = 320) => {\n  const clean = enforceLanguage(value);\n  const characters = Array.from(clean);\n  if (characters.length <= maxCharacters) return clean;\n  const preview = characters.slice(0, maxCharacters).join('');\n  const boundaries = [...preview.matchAll(/[।.!?](?:\\s|$)/gu)];\n  const lastBoundary = boundaries.at(-1);\n  if (lastBoundary && lastBoundary.index >= 40) {\n    return preview.slice(0, lastBoundary.index + lastBoundary[0].length).trim();\n  }\n  return characters.slice(0, maxCharacters - 1).join('').trimEnd() + '…';\n};\n\nconst generated = String(data.output || data.text || data.response || '').trim();\nconst failed = Boolean(data.error) || !generated;\nconst reply = failed ? failureFallback : limitReply(generated);\n\nreturn [{\n  json: {\n    success: !failed,\n    reply,\n    confidence: failed ? 0 : 0.95,\n    used_deepseek: true,\n    handoff: failed,\n    intent: failed ? 'ai_error_handoff' : 'digital_ai_consultation',\n    specialist_persona: routed.specialist_persona,\n    sentiment: routed.sentiment,\n    lead_tier: routed.lead_tier,\n    urgency_score: routed.urgency_score,\n    service_category: routed.service_category,\n    priority_level: routed.urgency_score >= 8 ? 'HIGH' : 'NORMAL',\n    reason: failed ? 'deepseek_unavailable' : 'deepseek_ai_agent',\n    service_code: routed.service_code,\n    customer_id: routed.customerId,\n    customer_ref: routed.customer_ref,\n    entities: routed.entities || {},\n    match_readiness: routed.match_readiness || {},\n    missing_fields: routed.match_readiness?.missing_fields || [],\n    message_id: routed.messageId,\n  }\n}];"
+      },
+      "id": "f6666666-6666-4666-8666-666666666666",
+      "name": "[FILTER 5] Anti-Hallucination & Output Compliance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2740,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nlet lifecycle_stage = 'general_inquiry';\nlet next_best_action = 'গ্রাহককে সেবা নির্বাচনে সাহায্য করুন';\n\nif (item.lead_tier === 'HOT_PAYMENT_LEAD') {\n  lifecycle_stage = 'payment_verification';\n  next_best_action = 'bKash/Nagad TrxID মিলিয়ে কাজ শুরু করুন';\n} else if (item.service_category && item.service_category.includes('Dhaka City New')) {\n  lifecycle_stage = 'dhaka_new_birth_1day';\n  next_best_action = 'জন্মসাল জেনে নিয়ে (২০০২ আগে/২০০২-১২/২০১২ পরে) কাগজপত্র সংগ্রহ করে ১ দিনে ডেলিভারি দিন';\n} else if (item.service_category && item.service_category.includes('Chattogram City New')) {\n  lifecycle_stage = 'ctg_tuesday_birth_intake';\n  next_best_action = 'চট্টগ্রাম সিটির আবেদন ফাইল প্রস্তুত করে মঙ্গলবারের লটে অন্তর্ভুক্ত করুন';\n} else if (item.service_category && item.service_category.includes('Birth Correction')) {\n  lifecycle_stage = 'birth_correction_review';\n  next_best_action = '১৭ ডিজিটের জন্ম নিবন্ধন নম্বর ও সংশোধনের প্রমাণপত্রের ছবি চেয়ে নিন';\n}\n\nreturn [{\n  json: {\n    ...item,\n    lifecycle_stage,\n    next_best_action,\n    digital_delivery_mode: 'WhatsApp PDF (1 Day / Fast Delivery)'\n  }\n}];"
+      },
+      "id": "afffffff-ffff-4fff-8fff-ffffffffffff",
+      "name": "CRM Lead & Digital Order Profiler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2980,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nlet reply = '';\nlet handoff = false;\nlet priority = 'NORMAL';\nlet reason = 'fast_rule';\n\nif (!item.validCustomer) {\n  reply = 'নিরাপদ সেবার জন্য ফোন নম্বর পাওয়া যায়নি। অনুগ্রহ করে আবার মেসেজ দিন।';\n  priority = 'LOW';\n  reason = 'missing_customer_id';\n} else if (item.is_spam) {\n  reply = 'কোন কাজের জন্য মেসেজ দিয়েছেন পরিষ্কার করে লিখলে ভালো হয়।';\n  priority = 'LOW';\n  reason = item.spam_status;\n} else if (item.requires_human_review) {\n  reply = item.review_reason === 'NOT_FOUND'\n    ? 'পেমেন্টটি স্বয়ংক্রিয়ভাবে যাচাই হয়নি। আমাদের টিম TrxID দেখে নিশ্চিত করছে।'\n    : 'ফাইল বা অর্ডারের তথ্য নিশ্চিতভাবে মেলেনি। ভুল ডেলিভারি এড়াতে আমাদের টিম যাচাই করছে।';\n  handoff = true;\n  priority = 'P1_HIGH';\n  reason = item.review_reason || 'live_analysis_review';\n} else if (item.is_prompt_injection) {\n  reply = 'আপনার মেসেজটি আমাদের একজন প্রতিনিধি দেখে উত্তর দিচ্ছেন।';\n  handoff = true;\n  priority = 'P2_MEDIUM';\n  reason = 'prompt_injection_detected';\n} else if (item.is_risky) {\n  reply = 'আপনার বিষয়টি আমাদের টিম বিশেষভাবে দেখে দ্রুত সমাধান করে দিচ্ছে।';\n  handoff = true;\n  priority = 'P1_CRITICAL';\n  reason = 'sensitive_keyword';\n} else {\n  reply = 'স্বাগতম! ঢাকা বা চট্টগ্রামের জন্ম নিবন্ধন, সংশোধন বা অন্য কোনো কাজে কীভাবে সহায়তা করতে পারি?';\n  priority = 'ZERO_COST';\n  reason = 'free_rule_greeting';\n}\n\nreturn [{\n  json: {\n    success: true,\n    reply,\n    confidence: handoff ? 0.9 : 0.95,\n    used_deepseek: false,\n    handoff,\n    priority_level: priority,\n    lifecycle_stage: handoff ? 'human_escalation' : 'fast_rule_resolved',\n    next_best_action: handoff ? 'গ্রাহকের সাথে কথা বলে সমাধান করুন' : 'স্বয়ংক্রিয়ভাবে উত্তর প্রদান সম্পন্ন',\n    digital_delivery_mode: 'WhatsApp PDF',\n    reason,\n    intent: handoff ? 'sensitive_handoff' : 'fast_rule',\n    specialist_persona: item.specialist_persona,\n    sentiment: item.sentiment,\n    lead_tier: item.lead_tier,\n    urgency_score: item.urgency_score,\n    service_category: item.service_category,\n    service_code: item.service_code,\n    customer_id: item.customerId,\n    customer_ref: item.customer_ref,\n    entities: item.entities || {},\n    match_readiness: item.match_readiness || {},\n    missing_fields: item.match_readiness?.missing_fields || [],\n    message_id: item.messageId\n  }\n}];"
+      },
+      "id": "b0000000-0000-4000-8000-000000000000",
+      "name": "Escalation Triage & Fast Router",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2740,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": {{ $json.success ?? true }},\n  \"reply\": {{ JSON.stringify($json.reply || '') }},\n  \"confidence\": {{ $json.confidence ?? ($json.handoff ? 0.9 : 0.95) }},\n  \"used_deepseek\": {{ $json.used_deepseek ?? false }},\n  \"handoff\": {{ $json.handoff ?? false }},\n  \"priority_level\": {{ JSON.stringify($json.priority_level || 'NORMAL') }},\n  \"lead_tier\": {{ JSON.stringify($json.lead_tier || 'STANDARD') }},\n  \"urgency_score\": {{ $json.urgency_score ?? 5 }},\n  \"service_category\": {{ JSON.stringify($json.service_category || 'Digital Services') }},\n  \"service_code\": {{ JSON.stringify($json.service_code || 'SRV_GENERAL') }},\n  \"intent\": {{ JSON.stringify($json.intent || 'general_inquiry') }},\n  \"specialist_persona\": {{ JSON.stringify($json.specialist_persona || 'general_support') }},\n  \"sentiment\": {{ JSON.stringify($json.sentiment || 'neutral') }},\n  \"lifecycle_stage\": {{ JSON.stringify($json.lifecycle_stage || 'inquiry') }},\n  \"next_best_action\": {{ JSON.stringify($json.next_best_action || '') }},\n  \"digital_delivery_mode\": {{ JSON.stringify($json.digital_delivery_mode || 'WhatsApp PDF') }},\n  \"entities\": {{ JSON.stringify($json.entities || {}) }},\n  \"match_readiness\": {{ JSON.stringify($json.match_readiness || {}) }},\n  \"missing_fields\": {{ JSON.stringify($json.missing_fields || []) }},\n  \"reason\": {{ JSON.stringify($json.reason || 'ok') }},\n  \"customer_ref\": {{ JSON.stringify($json.customer_ref || '') }},\n  \"message_id\": {{ JSON.stringify($json.message_id || '') }}\n}",
+        "options": {}
+      },
+      "id": "a7777777-7777-4777-8777-777777777777",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nconst text = String(item.normalized_message || item.message || '');\nconst normalizeDigits = (value = '') => String(value).replace(/[০-৯]/g, (digit) => '০১২৩৪৫৬৭৮৯'.indexOf(digit));\nconst first = (patterns) => {\n  for (const pattern of patterns) {\n    const match = text.match(pattern);\n    if (match?.[1]) return String(match[1]).trim();\n  }\n  return '';\n};\nconst applicationId = normalizeDigits(first([/(?:application\\s*id|আবেদনপত্র\\s*নম্বর|আবেদন\\s*নম্বর)\\s*[:#：ঃ-]?\\s*([০-৯\\d]{6,20})/iu]));\nconst birthRegistrationNumber = normalizeDigits(first([/(?:birth\\s*registration\\s*(?:number|no)|জন্ম\\s*নিবন্ধন\\s*(?:নম্বর|নং))\\s*[:#：ঃ-]?\\s*([০-৯\\d]{15,20})/iu]));\nconst dob = normalizeDigits(first([/(?:date\\s*of\\s*birth|dob|জন্ম\\s*তারিখ)\\s*[:：ঃ-]?\\s*([০-৯\\d]{1,2}[\\/.-][০-৯\\d]{1,2}[\\/.-][০-৯\\d]{4})/iu, /(?:^|\\n)\\s*([০-৯\\d]{1,2}[\\/.-][০-৯\\d]{1,2}[\\/.-][০-৯\\d]{4})\\s*$/imu])).replace(/[.-]/g, '/');\nconst englishName = first([/name\\s*\\(\\s*english\\s*\\)\\s*[:：ঃ-]?\\s*([^\\n\\r]+)/iu, /name\\s*english\\s*[:：ঃ-]?\\s*([^\\n\\r]+)/iu]);\nconst name = first([/(?:^|\\n)\\s*(?:নাম(?:\\s+বাংলা)?(?:\\s+নাম)?|name(?!\\s*\\())\\s*[:：ঃ-]?\\s*([^\\n\\r]+)/imu]);\nconst fatherName = first([/(?:father(?:'s)?\\s*name|পিতার\\s*নাম|পিতাঃ|পিতা)\\s*[:：ঃ-]?\\s*([^\\n\\r]+)/iu]);\nconst motherName = first([/(?:mother(?:'s)?\\s*name|মাতার\\s*নাম|মাতাঃ|মাতা)\\s*[:：ঃ-]?\\s*([^\\n\\r]+)/iu]);\nconst address = first([/(?:office\\s*address|permanent\\s*address|স্থায়ী\\s*ঠিকানা|ঠিকানা|গ্রাম)\\s*[:：ঃ-]?\\s*([^\\n\\r]+)/iu]);\nconst trxId = first([/(?:trx\\s*id|trxid|transaction\\s*id)\\s*[:#：ঃ-]?\\s*([A-Za-z0-9_-]{8,64})/iu]);\nconst entities = Object.fromEntries(Object.entries({ applicationId, birthRegistrationNumber, name, englishName, dob, fatherName, motherName, address, trxId }).filter(([, value]) => value));\nreturn [{ json: { ...item, entities, entity_count: Object.keys(entities).length } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "e1111111-1111-4111-8111-111111111111",
+      "name": "Entity & Form Extractor"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nconst entities = item.entities || {};\nconst present = [];\nif (entities.applicationId) present.push('applicationId');\nif (entities.name || entities.englishName) present.push('name');\nif (entities.dob) present.push('dob');\nif (entities.fatherName) present.push('fatherName');\nif (entities.motherName) present.push('motherName');\nif (entities.address) present.push('address');\nif (entities.birthRegistrationNumber) present.push('birthRegistrationNumber');\nconst missing = [];\nif (present.length < 2) {\n  if (!present.includes('name')) missing.push('name');\n  if (!present.includes('dob')) missing.push('dob');\n  if (present.length + missing.length < 2) missing.push('fatherName অথবা motherName');\n}\nconst birthYear = Number(String(entities.dob || '').split('/').at(-1) || 0);\nlet ageBracket = '';\nlet requiredDocuments = [];\nif (birthYear && birthYear < 2002) {\n  ageBracket = 'BEFORE_2002';\n  requiredDocuments = ['নিজের NID অথবা passport/online birth certificate'];\n} else if (birthYear >= 2002 && birthYear <= 2012) {\n  ageBracket = '2002_TO_2012';\n  requiredDocuments = ['পিতার NID', 'মাতার NID'];\n} else if (birthYear > 2012) {\n  ageBracket = 'AFTER_2012';\n  requiredDocuments = ['পিতার NID', 'মাতার NID', 'পিতা-মাতার online birth certificate', 'টিকা কার্ড'];\n}\nreturn [{ json: { ...item, match_readiness: { present_fields: present, matched_field_count: present.length, safe_two_field_ready: present.length >= 2, missing_fields: missing }, age_bracket: ageBracket, required_documents: requiredDocuments } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "id": "e2222222-2222-4222-8222-222222222222",
+      "name": "Missing Information & Match Readiness"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://wafastapi.com/api/agent/audit",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ eventType: 'AGENT_RESPONSE', customerPhone: $json.customer_id, messageId: $json.message_id, outcome: $json.reason, confidence: $json.confidence, needsReview: $json.handoff, details: { intent: $json.intent, sentiment: $json.sentiment, lifecycleStage: $json.lifecycle_stage, serviceCode: $json.service_code, entities: $json.entities, role: 'customer' } }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3220,
+        -260
+      ],
+      "id": "e6666666-6666-4666-8666-666666666666",
+      "name": "Audit AI Decision",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "waExpressReplyApi01",
+          "name": "WhatsApp Express - Reply API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://wafastapi.com/api/agent/audit",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ eventType: 'AGENT_RESPONSE', customerPhone: $json.customer_id, messageId: $json.message_id, outcome: $json.reason, confidence: $json.confidence, needsReview: $json.handoff, details: { intent: $json.intent, sentiment: $json.sentiment, lifecycleStage: $json.lifecycle_stage, serviceCode: $json.service_code, entities: $json.entities, role: 'customer' } }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3020,
+        120
+      ],
+      "id": "e7777777-7777-4777-8777-777777777777",
+      "name": "Audit Fast Decision",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "waExpressReplyApi01",
+          "name": "WhatsApp Express - Reply API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://wafastapi.com/api/agent/analyze",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $json.customerId, message: $json.normalized_message, messageId: $json.messageId, hasMedia: Boolean($json.source?.mediaUrl || $json.source?.mediaType || $json.source?.ocrText), ocrText: $json.source?.ocrText || '' }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        0
+      ],
+      "id": "e3333333-3333-4333-8333-333333333333",
+      "name": "Live CRM, Order, OCR, Payment & Service Analyzer",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "waExpressReplyApi01",
+          "name": "WhatsApp Express - Reply API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const original = $('[FILTER 4] Urgency, VIP & Service Package Injector').first().json;\nconst response = $input.first().json || {};\nconst live = response.success && response.analysis ? response.analysis : { unavailable: true, error: response.error?.message || response.error || 'Live analyzer unavailable' };\nconst selected = live.selectedService || null;\nreturn [{ json: { ...original, live_analysis: live, live_analysis_available: !live.unavailable, service_category: selected?.name || original.service_category, service_code: selected?.code || original.service_code, digital_delivery_time: selected?.deliveryTime || original.digital_delivery_time } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ],
+      "id": "e4444444-4444-4444-8444-444444444444",
+      "name": "Merge Authoritative Live Context"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nconst live = item.live_analysis || {};\nconst requiresReview = Boolean(live.humanReviewRequired || live.documentAssessment?.needsReview || (live.payment && !live.payment.verified));\nlet reviewReason = '';\nif (live.documentAssessment?.needsReview) reviewReason = live.documentAssessment.decision || 'DOCUMENT_REVIEW';\nelse if (live.payment && !live.payment.verified) reviewReason = live.payment.status || 'PAYMENT_REVIEW';\nreturn [{ json: { ...item, requires_human_review: requiresReview, review_reason: reviewReason, delivery_authorized: live.documentAssessment?.autoDeliver === true && live.documentAssessment?.decision === 'UNIQUE_MATCH' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        0
+      ],
+      "id": "e5555555-5555-4555-8555-555555555555",
+      "name": "Confidence & Human Review Gate"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "[FILTER 1] Spam & Payload Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[FILTER 1] Spam & Payload Guard": {
+      "main": [
+        [
+          {
+            "node": "[FILTER 2] Dialect & Phonetic Normalizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[FILTER 2] Dialect & Phonetic Normalizer": {
+      "main": [
+        [
+          {
+            "node": "[FILTER 3] PII Privacy & Security Shield",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[FILTER 3] PII Privacy & Security Shield": {
+      "main": [
+        [
+          {
+            "node": "Entity & Form Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[FILTER 4] Urgency, VIP & Service Package Injector": {
+      "main": [
+        [
+          {
+            "node": "Live CRM, Order, OCR, Payment & Service Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs DeepSeek AI?": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Escalation Triage & Fast Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "[FILTER 5] Anti-Hallucination & Output Compliance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[FILTER 5] Anti-Hallucination & Output Compliance": {
+      "main": [
+        [
+          {
+            "node": "CRM Lead & Digital Order Profiler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM Lead & Digital Order Profiler": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit AI Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalation Triage & Fast Router": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit Fast Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Customer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entity & Form Extractor": {
+      "main": [
+        [
+          {
+            "node": "Missing Information & Match Readiness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Missing Information & Match Readiness": {
+      "main": [
+        [
+          {
+            "node": "[FILTER 4] Urgency, VIP & Service Package Injector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live CRM, Order, OCR, Payment & Service Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Merge Authoritative Live Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Authoritative Live Context": {
+      "main": [
+        [
+          {
+            "node": "Confidence & Human Review Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confidence & Human Review Gate": {
+      "main": [
+        [
+          {
+            "node": "Needs DeepSeek AI?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 300,
+    "errorWorkflow": "deepseekAgentErrorAudit"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [],
+  "triggerCount": 0
+}
