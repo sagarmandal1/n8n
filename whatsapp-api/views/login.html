@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Premium Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-200 min-h-screen flex items-center justify-center relative overflow-hidden">
+    <!-- Background decorations -->
+    <div class="absolute top-0 left-0 w-full h-full overflow-hidden -z-10">
+        <div class="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] rounded-full bg-green-900/40 blur-[120px]"></div>
+        <div class="absolute bottom-[10%] right-[10%] w-[30%] h-[30%] rounded-full bg-emerald-800/20 blur-[100px]"></div>
+    </div>
+
+    <div class="glass-panel w-full max-w-md p-8 md:p-10 rounded-3xl shadow-2xl mx-4 relative z-10 transition-all hover:-translate-y-1">
+        <!-- Logo -->
+        <div class="flex flex-col items-center mb-8">
+            <div class="w-16 h-16 bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/30 mb-4 hover:scale-105 transition-transform cursor-pointer">
+                <i class="fab fa-whatsapp text-white text-4xl"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-white tracking-tight">Welcome Back</h1>
+            <p class="text-gray-400 mt-2 text-sm text-center">Sign in to WaFastApi Manager</p>
+        </div>
+
+        <div id="message" class="hidden mb-6 p-4 rounded-xl border flex items-center gap-3 text-sm font-medium transition-all">
+            <i class="fas fa-info-circle text-lg"></i>
+            <span id="message-text"></span>
+        </div>
+
+        <form id="login-form" class="space-y-5">
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5" for="login-identifier">Username or Email</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fas fa-user text-gray-500"></i>
+                    </div>
+                    <input type="text" id="login-identifier" required class="block w-full pl-11 pr-4 py-3.5 bg-gray-900/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all" placeholder="Enter your credentials">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5" for="password">Password</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fas fa-lock text-gray-500"></i>
+                    </div>
+                    <input type="password" id="password" required class="block w-full pl-11 pr-12 py-3.5 bg-gray-900/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all" placeholder="••••••••">
+                    <button type="button" class="toggle-password absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-white transition-colors">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="pt-2">
+                <button type="submit" class="submit-btn w-full flex justify-center py-3.5 px-4 rounded-xl shadow-sm text-sm font-bold text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 focus:ring-offset-gray-900 shadow-lg shadow-green-500/30 transition-all hover:scale-[1.02] active:scale-[0.98]">
+                    <i class="fas fa-sign-in-alt mt-0.5 mr-2"></i> Sign In
+                </button>
+            </div>
+        </form>
+
+        <p class="mt-8 text-center text-sm text-gray-400">
+            Don't have an account? 
+            <a href="/register" class="font-medium text-green-400 hover:text-green-300 transition-colors">Create one now</a>
+        </p>
+    </div>
+
+    <script>
+        const loginForm = document.getElementById('login-form');
+        const message = document.getElementById('message');
+        const messageText = document.getElementById('message-text');
+
+        document.querySelector('.toggle-password').addEventListener('click', function() {
+            const input = document.getElementById('password');
+            const icon = this.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.replace('fa-eye', 'fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.replace('fa-eye-slash', 'fa-eye');
+            }
+        });
+
+        function showMessage(text, type = 'error') {
+            messageText.textContent = text;
+            message.classList.remove('hidden', 'bg-red-500/10', 'border-red-500/50', 'text-red-400', 'bg-green-500/10', 'border-green-500/50', 'text-green-400');
+            
+            if(type === 'error') {
+                message.classList.add('bg-red-500/10', 'border-red-500/50', 'text-red-400');
+                message.querySelector('i').className = 'fas fa-exclamation-circle text-lg';
+            } else {
+                message.classList.add('bg-green-500/10', 'border-green-500/50', 'text-green-400');
+                message.querySelector('i').className = 'fas fa-check-circle text-lg';
+            }
+        }
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = loginForm.querySelector('.submit-btn');
+            const originalHTML = btn.innerHTML;
+            
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mt-0.5 mr-2"></i> Authenticating...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        login: document.getElementById('login-identifier').value,
+                        password: document.getElementById('password').value
+                    })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    showMessage('Welcome back! Redirecting...', 'success');
+                    // Check role to redirect admin → /admin, user → /sessions
+                    try {
+                        const meRes = await fetch('/api/auth/me');
+                        const meData = await meRes.json();
+                        if (meData.user && meData.user.role === 'admin') {
+                            setTimeout(() => window.location.href = '/admin', 600);
+                        } else {
+                            setTimeout(() => window.location.href = '/sessions', 600);
+                        }
+                    } catch(_) {
+                        setTimeout(() => window.location.href = '/sessions', 600);
+                    }
+                } else {
+                    showMessage(data.error || 'Invalid credentials.');
+                }
+            } catch (err) {
+                showMessage('Network error occurred.');
+            } finally {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Forwarding History</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f3f4f6; }
+        .glass-panel { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+        .status-pending { background-color: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2); }
+        .status-resolved { background-color: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); }
+        .status-rejected { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+    </style>
+</head>
+<body class="antialiased">
+    <!-- Shared Navigation -->
+    <script src="/js/nav.js"></script>
+    <script>injectNav('sessions');</script>
+
+    <div class="pt-24 pb-12 max-w-6xl mx-auto px-4 sm:px-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                    <i class="fas fa-share-square text-blue-500"></i> Forwarding History
+                </h1>
+                <p class="text-gray-400 text-sm mt-1">Logs of forwarded orders and their corresponding replies.</p>
+            </div>
+            <div>
+                <button onclick="fetchHistory()" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white px-4 py-2.5 rounded-xl font-semibold transition flex items-center gap-2 text-sm">
+                    <i class="fas fa-sync-alt"></i> Refresh Logs
+                </button>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-gray-800 text-xs font-bold uppercase tracking-wider text-gray-400 bg-gray-900/50">
+                            <th class="px-6 py-4">Date & Time</th>
+                            <th class="px-6 py-4">Session</th>
+                            <th class="px-6 py-4">Order ID</th>
+                            <th class="px-6 py-4">Original Customer</th>
+                            <th class="px-6 py-4">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody" class="divide-y divide-gray-800/50 text-sm text-gray-300">
+                        <tr>
+                            <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                                <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mr-2"></div>
+                                Loading history logs...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="flex items-center justify-between px-6 py-4 border-t border-gray-800 bg-gray-900/30">
+                <div class="text-xs text-gray-400" id="paginationInfo">
+                    Showing 0 of 0 entries
+                </div>
+                <div class="flex gap-2">
+                    <button id="prevBtn" onclick="changePage(-1)" class="bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fas fa-chevron-left mr-1"></i> Previous
+                    </button>
+                    <button id="nextBtn" onclick="changePage(1)" class="bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Next <i class="fas fa-chevron-right ml-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        const limit = 20;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchHistory();
+        });
+
+        async function fetchHistory() {
+            const tableBody = document.getElementById('historyTableBody');
+            try {
+                const response = await fetch(`/api/session/forwarding/history?page=${currentPage}&limit=${limit}`);
+                if (!response.ok) throw new Error("Failed to fetch logs");
+                
+                const data = await response.json();
+                if (data.success) {
+                    displayLogs(data.logs);
+                    updatePagination(data.total);
+                } else {
+                    throw new Error(data.error || "Invalid response");
+                }
+            } catch (error) {
+                console.error(error);
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center text-red-500 font-semibold">
+                            <i class="fas fa-exclamation-triangle mr-2"></i> Failed to load forwarding history: ${error.message}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function displayLogs(logs) {
+            const tableBody = document.getElementById('historyTableBody');
+            if (!logs || logs.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center text-gray-500 italic">
+                            No forwarded orders found.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tableBody.innerHTML = logs.map(log => {
+                const date = new Date(log.createdAt).toLocaleString();
+                const sessionName = log.session ? log.session._id : 'N/A';
+                const customer = log.originalSender ? log.originalSender.replace(/@s.whatsapp.net|@g.us/, "") : 'Unknown';
+                
+                let statusClass = "status-pending";
+                let statusText = "Pending";
+                let statusIcon = "fa-clock";
+
+                if (log.status === "RESOLVED") {
+                    statusClass = "status-resolved";
+                    statusText = "Resolved";
+                    statusIcon = "fa-check-circle";
+                } else if (log.status === "REJECTED") {
+                    statusClass = "status-rejected";
+                    statusText = "Rejected";
+                    statusIcon = "fa-times-circle";
+                }
+
+                return `
+                    <tr class="hover:bg-gray-800/30 transition-all">
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-400 font-mono text-xs">${date}</td>
+                        <td class="px-6 py-4 whitespace-nowrap font-semibold text-gray-200">${sessionName}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-blue-400 font-bold font-mono">${log.orderId}</td>
+                        <td class="px-6 py-4 whitespace-nowrap font-mono text-xs">+${customer}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="status-badge ${statusClass}">
+                                <i class="fas ${statusIcon}"></i> ${statusText}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function updatePagination(total) {
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const info = document.getElementById('paginationInfo');
+
+            const totalPages = Math.ceil(total / limit);
+            info.textContent = `Page ${currentPage} of ${totalPages || 1} (Total ${total} logs)`;
+
+            prevBtn.disabled = currentPage <= 1;
+            nextBtn.disabled = currentPage >= totalPages;
+        }
+
+        function changePage(direction) {
+            currentPage += direction;
+            fetchHistory();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,1706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f3f4f6; overflow-x: hidden; }
+        .glass-panel { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .status-badge { padding: 6px 16px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 6px; }
+        .connected { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .created { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .disconnected { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .api-key-container { font-family: monospace; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px 14px; font-size: 0.875rem; display: flex; align-items: center; justify-content: space-between; border: 1px solid rgba(255,255,255,0.05); }
+        .webhook-url { font-family: monospace; background: rgba(236, 72, 153, 0.1); border: 1px solid rgba(236, 72, 153, 0.2); border-radius: 8px; padding: 10px 14px; font-size: 0.875rem; color: #db2777; word-break: break-all; margin: 8px 0; }
+        .modal { backdrop-filter: blur(8px); background: rgba(0, 0, 0, 0.7); }
+        /* Alerts */
+        .alert-container { position: fixed; top: 20px; right: 20px; z-index: 1000; width: 90%; max-width: 400px; }
+        .alert { padding: 16px; border-radius: 12px; margin-bottom: 12px; display: flex; gap: 12px; backdrop-filter: blur(10px); }
+        .alert-success { background: rgba(16,185,129,0.9); border: 1px solid #10b981; color: white;}
+        .alert-error { background: rgba(239,68,68,0.9); border: 1px solid #ef4444; color: white;}
+        .alert-warning { background: rgba(245,158,11,0.9); border: 1px solid #f59e0b; color: white;}
+        .alert-info { background: rgba(59,130,246,0.9); border: 1px solid #3b82f6; color: white;}
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .loading-spin { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        .toast { position: fixed; bottom: 20px; right: 20px; background: #1f2937; color: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); z-index: 1000; display: flex; gap: 12px; transition: transform 0.3s; transform: translateY(150%); border: 1px solid rgba(255,255,255,0.1); }
+        .toast.show { transform: translateY(0); }
+    </style>
+</head>
+<body class="antialiased selection:bg-emerald-500/30">
+
+    <div class="alert-container" id="alertContainer"></div>
+
+    <!-- Navigation injected by /js/nav.js -->
+    <script src="/js/nav.js"></script>
+
+    <!-- Main Content -->
+    <div class="pb-12 max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
+        <script>injectNav('dashboard');</script>
+        
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-white mb-2 tracking-tight">Devices & Sessions</h1>
+                <p class="text-gray-400 text-sm">Monitor and control your WhatsApp connections.</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="window.location.href = '/forwarding/history'" class="bg-gray-800 hover:bg-gray-700 text-white border border-gray-700 px-5 py-2.5 rounded-full text-sm font-bold transition-all flex items-center gap-2">
+                    <i class="fas fa-history text-blue-500"></i> Forwarding Logs
+                </button>
+                <button id="newDeviceHeaderBtn" onclick="createSession()" class="bg-gradient-to-r from-emerald-500 to-green-600 text-white px-5 py-2.5 rounded-full text-sm font-bold hover:from-emerald-400 hover:to-green-500 transition-all shadow-lg shadow-emerald-500/25 border border-emerald-400 flex items-center gap-2">
+                    <i class="fas fa-plus"></i> New Device
+                </button>
+            </div>
+            
+            <div class="relative w-full md:w-auto flex items-center gap-3">
+                <div class="relative w-full md:w-64">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i class="fas fa-search text-gray-500"></i>
+                    </div>
+                    <input type="text" id="searchInput" placeholder="Search sessions..." class="block w-full pl-10 pr-4 py-2.5 bg-gray-900 border border-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all text-sm" onkeyup="filterSessions()">
+                </div>
+                <button onclick="loadSessions()" class="p-2.5 bg-gray-900 border border-gray-800 rounded-xl text-gray-400 hover:text-white hover:border-emerald-500/50 transition-all group shadow-inner">
+                    <i class="fas fa-sync-alt group-hover:rotate-180 transition-transform duration-500"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 hover:border-emerald-500/30 transition-colors relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm font-medium mb-1 tracking-wide">TOTAL INSTANCES</p>
+                        <p class="text-4xl font-black text-white px-2" id="totalSessions">0</p>
+                    </div>
+                    <i class="fas fa-server text-3xl text-gray-700"></i>
+                </div>
+            </div>
+            <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 hover:border-emerald-500/30 transition-colors relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm font-medium mb-1 tracking-wide">CONNECTED</p>
+                        <p class="text-4xl font-black text-emerald-400 px-2" id="connectedSessions">0</p>
+                    </div>
+                    <i class="fas fa-check-circle text-3xl text-emerald-900/50"></i>
+                </div>
+            </div>
+            <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 hover:border-rose-500/30 transition-colors relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-rose-500"></div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm font-medium mb-1 tracking-wide">OFFLINE</p>
+                        <p class="text-4xl font-black text-rose-400 px-2" id="disconnectedSessions">0</p>
+                    </div>
+                    <i class="fas fa-exclamation-circle text-3xl text-rose-900/50"></i>
+                </div>
+            </div>
+        </div>
+
+
+        <p class="text-gray-500 text-xs mb-2" id="statsUpdatedAt"></p>
+        <!-- Today's pipeline counters, refreshed every 15s -->
+        <div id="forwardingStatsRow" class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8 hidden">
+            <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 hover:border-blue-500/30 transition-colors relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-xs font-semibold mb-1 tracking-wide">TODAY FORWARDED</p>
+                        <p class="text-3xl font-black text-white px-2" id="fwTotal">0</p>
+                    </div>
+                    <i class="fas fa-share-square text-2xl text-blue-900/50"></i>
+                </div>
+            </div>
+            <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 hover:border-green-500/30 transition-colors relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-xs font-semibold mb-1 tracking-wide">TODAY RESOLVED</p>
+                        <p class="text-3xl font-black text-green-400 px-2" id="fwResolved">0</p>
+                    </div>
+                    <i class="fas fa-check-circle text-2xl text-green-900/50"></i>
+                </div>
+            </div>
+            <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 hover:border-rose-500/30 transition-colors relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-rose-500"></div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-xs font-semibold mb-1 tracking-wide">TODAY REJECTED</p>
+                        <p class="text-3xl font-black text-rose-400 px-2" id="fwRejected">0</p>
+                    </div>
+                    <i class="fas fa-times-circle text-2xl text-rose-900/50"></i>
+                </div>
+            </div>
+            <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 hover:border-amber-500/30 transition-colors relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-xs font-semibold mb-1 tracking-wide">TODAY PENDING</p>
+                        <p class="text-3xl font-black text-amber-400 px-2" id="fwPending">0</p>
+                    </div>
+                    <i class="fas fa-clock text-2xl text-amber-900/50"></i>
+                </div>
+            </div>
+        </div>
+
+        <p id="lastUpdated" class="text-xs text-gray-500 mb-6 font-medium tracking-wide">Last updated: Never</p>
+
+        <!-- Analytics Chart -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl mb-8 relative overflow-hidden hidden md:block">
+             <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl"></div>
+             <div class="relative z-10 w-full">
+                  <h3 class="text-lg font-bold text-white mb-4"><i class="fas fa-chart-line text-indigo-400 mr-2"></i> Activity Pulse (Last 7 Days)</h3>
+                  <div class="w-full h-[300px] flex justify-center items-center">
+                       <canvas id="analyticsChart"></canvas>
+                  </div>
+             </div>
+        </div>
+
+        <!-- Sessions Grid -->
+        <!-- Vendors card. Kept outside the sessions grid because loadSessions()
+             clears that container on every render; placeVendorCard() moves this
+             element into the grid afterwards so it occupies the next cell. -->
+        <div id="vendorCardHost" class="hidden">
+        <!-- Vendor list: vendors.txt and dashboard entries are both honoured -->
+        <div id="vendorCard" class="bg-gray-900 rounded-2xl p-5 border border-gray-800 h-full">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="text-white font-bold"><i class="fas fa-user-tie mr-2 text-indigo-400"></i>Vendors</h3>
+              <p class="text-gray-400 text-xs mt-1">Anyone listed here or in <code class="text-gray-300">vendors.txt</code> is a vendor. Everyone else is a customer.</p>
+            </div>
+            <span class="text-xs text-gray-500" id="vendorCount"></span>
+          </div>
+
+          <label class="block text-gray-400 text-xs font-semibold mb-1">VENDOR NUMBERS — one per line (01… or 8801…)</label>
+          <textarea id="vendorNumbersInput" rows="4"
+            class="w-full bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-white font-mono focus:border-indigo-500 outline-none"
+            placeholder="Type your Vendor number here"></textarea>
+
+          <label class="block text-gray-400 text-xs font-semibold mt-3 mb-1">VENDOR GROUP (optional)</label>
+          <select id="vendorGroupInput" class="w-full bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-white focus:border-indigo-500 outline-none">
+            <option value="">— none —</option>
+          </select>
+
+          <div class="flex items-center gap-3 mt-4">
+            <button onclick="saveVendors()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 rounded-lg">
+              <i class="fas fa-save mr-1"></i> Save vendors
+            </button>
+            <span id="vendorSaveMsg" class="text-xs"></span>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-gray-800">
+            <p class="text-gray-400 text-xs font-semibold mb-2">ACTIVE VENDORS (file + dashboard)</p>
+            <div id="vendorActiveList" class="flex flex-wrap gap-2 text-xs"></div>
+          </div>
+        </div>
+
+        </div>
+
+        <div id="sessions" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
+        <div id="emptyState" class="hidden flex flex-col items-center justify-center py-20 px-4">
+            <div class="w-20 h-20 bg-gray-900 border border-gray-800 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                <i class="fas fa-robot text-3xl text-gray-600"></i>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-2 tracking-tight">No Instances Yet</h3>
+            <p class="text-gray-400 text-sm max-w-sm text-center mb-8">Deploy your first WhatsApp session cluster immediately.</p>
+            <button onclick="createSession()" class="bg-gradient-to-r from-emerald-500 to-green-600 text-white px-6 py-3 rounded-full text-sm font-bold shadow-lg shadow-emerald-500/25 hover:scale-105 transition-transform flex items-center gap-2">
+                <i class="fas fa-plus"></i> Deploy Instance
+            </button>
+        </div>
+
+        <div id="loadingState" class="flex flex-col items-center justify-center py-20 px-4">
+            <i class="fas fa-circle-notch fa-spin text-4xl text-emerald-500 mb-4 drop-shadow-lg"></i>
+            <p class="text-gray-400 text-sm font-medium">Fetching active clusters...</p>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirmModal" class="fixed inset-0 modal hidden items-center justify-center z-[100] p-4">
+      <div class="bg-gray-900 rounded-2xl p-6 md:p-8 max-w-md w-full border border-gray-800 shadow-2xl relative">
+        <div id="confirmIcon" class="w-16 h-16 rounded-full mx-auto flex items-center justify-center text-2xl mb-4 bg-gray-800">
+          <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <h3 id="confirmTitle" class="text-xl font-bold text-white text-center mb-2">Confirm Action</h3>
+        <p id="confirmMessage" class="text-gray-400 text-center mb-8 text-sm">Are you sure you want to proceed?</p>
+        <div class="flex gap-3">
+          <button id="confirmCancel" class="flex-1 py-3 px-4 bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white rounded-xl font-semibold transition-colors text-sm">Cancel</button>
+          <button id="confirmOk" class="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-semibold transition-colors text-sm shadow-lg shadow-rose-500/20 w-fit">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- QR Modal -->
+    <div id="qrModal" class="fixed inset-0 modal hidden items-center justify-center z-50 p-4">
+      <div class="bg-gray-900 p-6 rounded-3xl w-full max-w-sm border border-gray-800 shadow-2xl relative">
+        <button onclick="closeQRModal()" class="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center"><i class="fas fa-times"></i></button>
+        <h2 class="text-xl font-bold text-center text-white mb-6">Device Link</h2>
+        <div id="qrBox" class="bg-white p-4 rounded-2xl flex justify-center mb-6 shadow-xl border border-gray-300">
+          <i class="fas fa-spinner fa-spin text-gray-800 text-4xl py-12"></i>
+        </div>
+        <div id="qrStatus" class="hidden text-center mb-4 bg-gray-800 p-2 rounded-lg border border-gray-700">
+            <i class="fas fa-sync-alt fa-spin text-emerald-500 mr-2"></i>
+            <span class="text-emerald-400 text-sm font-medium">Listening...</span>
+        </div>
+        <p class="text-center text-gray-500 text-xs mt-4 leading-relaxed bg-gray-800/50 p-2 rounded-lg">WhatsApp > Linked Devices > Link a Device.</p>
+      </div>
+    </div>
+
+    <!-- Pair Code Modal -->
+    <div id="pairModal" class="fixed inset-0 modal hidden items-center justify-center z-50 p-4">
+      <div class="bg-gray-900 p-6 md:p-8 rounded-3xl w-full max-w-md border border-gray-800 shadow-2xl relative">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-xl font-bold text-white"><i class="fas fa-mobile-alt mr-2 text-purple-400"></i> Pair Code</h2>
+          <button onclick="closePairModal()" class="text-gray-500 hover:text-white border-0"><i class="fas fa-times text-lg"></i></button>
+        </div>
+        <div id="pairStep1">
+            <label class="block text-gray-400 text-sm mb-2">Target Phone Number (+CountryCode)</label>
+            <input id="pairPhone" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-purple-500 outline-none transition-all mb-4 text-sm" placeholder="+1234567890">
+            <button id="getPairBtn" onclick="getPairCode()" class="w-full bg-purple-600 hover:bg-purple-500 text-white rounded-xl py-3 font-bold transition-all shadow-lg shadow-purple-500/20 text-sm">Get Pairing Code</button>
+        </div>
+        <div id="pairStep2" class="hidden text-center">
+            <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-4 shadow-inner">
+                <div id="pairCodeDisplay" class="text-4xl font-extrabold text-white tracking-[0.2em] font-mono pulse"></div>
+            </div>
+            <p class="text-emerald-400 text-xs mb-4 bg-gray-800 py-2 rounded-lg"><i class="fas fa-circle-notch fa-spin mr-1"></i> Waiting for approval...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Webhook Modal -->
+    <div id="webhookModal" class="fixed inset-0 modal hidden items-center justify-center z-50 p-4">
+      <div class="bg-gray-900 p-6 md:p-8 rounded-3xl w-full max-w-lg border border-gray-800 shadow-2xl relative">
+        <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+          <h2 class="text-xl font-bold text-white"><i class="fas fa-satellite-dish mr-2 text-pink-500"></i> Webhook Engine</h2>
+          <button onclick="closeWebhookModal()" class="text-gray-500 hover:text-white"><i class="fas fa-times text-lg"></i></button>
+        </div>
+        <label class="block text-gray-400 text-sm mb-2 font-medium">Endpoint URL</label>
+        <div class="bg-gray-800 border-l-4 border-emerald-500 p-3 mb-4 rounded-r-xl shadow-inner">
+             <div id="currentWebhook" class="text-xs text-green-400 font-mono break-all font-semibold"></div>
+        </div>
+        <input id="webhookUrl" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-pink-500 outline-none transition-all placeholder-gray-600 mb-4 text-sm" placeholder="https://endpoint-url.com/event">
+        <div id="webhookSecretBox" class="hidden mb-6">
+          <label class="block text-gray-400 text-sm mb-2 font-medium">Signing Secret</label>
+          <div class="flex gap-2">
+            <input id="webhookSecret" readonly class="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-gray-300 font-mono text-xs" value="">
+            <button type="button" onclick="copyWebhookSecret()" class="w-11 h-11 bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white rounded-xl" title="Copy signing secret" aria-label="Copy signing secret"><i class="fas fa-copy"></i></button>
+          </div>
+        </div>
+        <div class="flex gap-3">
+            <button onclick="clearWebhook()" class="flex-1 bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white rounded-xl py-3 font-bold transition-all text-sm">Clear Link</button>
+            <button onclick="saveWebhook()" class="flex-[2] bg-pink-600 hover:bg-pink-500 text-white rounded-xl py-3 font-bold transition-all shadow-lg shadow-pink-500/20 text-sm">Deploy Webhook</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Forwarding Modal -->
+    <div id="forwardingModal" class="fixed inset-0 modal hidden items-center justify-center z-50 p-4">
+      <div class="bg-gray-900 p-6 md:p-8 rounded-3xl w-full max-w-lg border border-gray-800 shadow-2xl relative">
+        <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+          <h2 class="text-xl font-bold text-white"><i class="fas fa-share-square mr-2 text-blue-500"></i> Forwarding Bot</h2>
+          <button onclick="closeForwardingModal()" class="text-gray-500 hover:text-white"><i class="fas fa-times text-lg"></i></button>
+        </div>
+        
+        <div class="mb-4">
+          <label class="block text-gray-400 text-sm mb-2 font-medium">Forwarding Status</label>
+          <div class="flex items-center gap-3">
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="forwardingEnabled" class="sr-only peer">
+                <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <span class="ml-3 text-sm font-medium text-gray-300" id="forwardingStatusLabel">Disabled</span>
+              </label>
+          </div>
+        </div>
+
+        <div class="mb-6">
+          <label class="block text-gray-400 text-sm mb-2 font-medium">Target Phone Number / Group JID</label>
+          <input id="forwardingTarget" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-gray-600 text-sm" placeholder="e.g. 88017XXXXXXXX or 120363123456789@g.us">
+          <p class="text-xs text-gray-500 mt-2">Enter the destination phone number with country code (e.g. 88017...) or a group JID.</p>
+        </div>
+
+        <div class="flex gap-3">
+            <button onclick="closeForwardingModal()" class="flex-1 bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white rounded-xl py-3 font-bold transition-all text-sm">Cancel</button>
+            <button onclick="saveForwarding()" class="flex-[2] bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-3 font-bold transition-all shadow-lg shadow-blue-500/20 text-sm">Save Config</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Msg Modal (Simple) -->
+    <div id="msgModal" class="fixed inset-0 modal hidden items-center justify-center z-50 p-4">
+      <div class="bg-gray-900 p-6 rounded-3xl w-full max-w-md border border-gray-800 shadow-2xl">
+         <div class="flex justify-between items-center mb-6">
+          <h2 class="text-xl font-bold text-white"><i class="fas fa-paper-plane mr-2 text-blue-500"></i> Test Message</h2>
+          <button onclick="closeMsgModal()" class="text-gray-500 hover:text-white"><i class="fas fa-times text-lg"></i></button>
+        </div>
+        <input id="msgNumber" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white mb-4 focus:ring-blue-500 outline-none text-sm placeholder-gray-600" placeholder="Number (e.g. +12345)">
+        <textarea id="msgText" class="w-full h-24 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white mb-6 focus:ring-blue-500 outline-none resize-none text-sm placeholder-gray-600" placeholder="Hello World!"></textarea>
+        <button onclick="sendMsg()" class="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-3 font-bold text-sm shadow-lg shadow-blue-500/20 flex justify-center items-center gap-2"><i class="fas fa-paper-plane"></i> Send Now</button>
+      </div>
+    </div>
+
+    <!-- Info Modal -->
+    <div id="infoModal" class="fixed inset-0 modal hidden items-center justify-center z-50 p-4">
+     <div class="bg-gray-900 p-6 rounded-3xl w-full max-w-2xl border border-gray-800 shadow-2xl relative">
+        <button onclick="closeInfoModal()" class="absolute top-4 right-4 text-gray-500 hover:text-white"><i class="fas fa-times text-lg"></i></button>
+        <h2 class="text-xl font-bold text-white mb-4"><i class="fas fa-terminal mr-2 text-purple-400"></i> Session Environment Dump</h2>
+        <pre id="infoContent" class="bg-black border border-gray-800 p-4 rounded-xl text-emerald-400 text-xs font-mono max-h-96 overflow-y-auto w-full shadow-inner"></pre>
+     </div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-[200] space-y-2"></div>
+
+<script>
+    const API = "/api/session";
+    let activeQRSession = null;
+    let activePairSession = null;
+    let activeMsgSession = null;
+    let activeWebhookSession = null;
+    let sessionsData = [];
+    let apiKeyVisibility = {};
+    let pairCodeInterval = null;
+    let qrCheckInterval = null;
+    let qrRefreshInterval = null;
+    let isPairModalClosing = false;
+    let isQRModalClosing = false;
+
+    /* ───────── ALERT SYSTEM ───────── */
+    function showAlert(message, type = 'info', title = '', duration = 5000) {
+      const container = document.getElementById('alertContainer');
+      const alertId = 'alert-' + Date.now();
+
+      const alertDiv = document.createElement('div');
+      alertDiv.className = `alert alert-${type}`;
+      alertDiv.id = alertId;
+
+      // Determine icon based on type
+      let icon = 'info-circle';
+      switch (type) {
+        case 'success': icon = 'check-circle'; break;
+        case 'error': icon = 'exclamation-circle'; break;
+        case 'warning': icon = 'exclamation-triangle'; break;
+        default: icon = 'info-circle';
+      }
+
+      alertDiv.innerHTML = `
+          <i class="fas fa-${icon} alert-icon"></i>
+          <div class="alert-content">
+            ${title ? `<div class="alert-title">${title}</div>` : ''}
+            <div class="alert-message">${message}</div>
+          </div>
+          <button class="alert-close" onclick="removeAlert('${alertId}')">
+            <i class="fas fa-times"></i>
+          </button>
+        `;
+
+      container.appendChild(alertDiv);
+
+      // Auto remove after duration
+      setTimeout(() => {
+        removeAlert(alertId);
+      }, duration);
+
+      return alertId;
+    }
+
+    // Remove alert function
+    function removeAlert(alertId) {
+      const alert = document.getElementById(alertId);
+      if (alert) {
+        alert.classList.add('hiding');
+        setTimeout(() => {
+          if (alert.parentNode) {
+            alert.parentNode.removeChild(alert);
+          }
+        }, 300);
+      }
+    }
+
+    /* ───────── TOAST SYSTEM ───────── */
+    function showToast(type, title, message, duration = 3000) {
+      const container = document.getElementById('toastContainer');
+      const toastId = 'toast-' + Date.now();
+
+      const toastDiv = document.createElement('div');
+      toastDiv.className = `toast toast-${type}`;
+      toastDiv.id = toastId;
+
+      // Determine icon based on type
+      let icon = 'info-circle';
+      switch (type) {
+        case 'success': icon = 'check-circle'; break;
+        case 'error': icon = 'exclamation-circle'; break;
+        case 'warning': icon = 'exclamation-triangle'; break;
+        default: icon = 'info-circle';
+      }
+
+      toastDiv.innerHTML = `
+          <i class="fas fa-${icon} toast-icon"></i>
+          <div class="toast-content">
+            <div class="toast-title">${title}</div>
+            <div class="toast-message">${message}</div>
+          </div>
+          <button class="toast-close" onclick="removeToast('${toastId}')">
+            <i class="fas fa-times"></i>
+          </button>
+        `;
+
+      container.appendChild(toastDiv);
+
+      // Show with animation
+      setTimeout(() => {
+        toastDiv.classList.add('show');
+      }, 10);
+
+      // Auto remove after duration
+      setTimeout(() => {
+        removeToast(toastId);
+      }, duration);
+
+      return toastId;
+    }
+
+    // Remove toast function
+    function removeToast(toastId) {
+      const toast = document.getElementById(toastId);
+      if (toast) {
+        toast.classList.remove('show');
+        setTimeout(() => {
+          if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+          }
+        }, 300);
+      }
+    }
+
+    /* ───────── CONFIRMATION MODAL ───────── */
+    function showConfirm(message, title = 'Confirm Action', type = 'warning', confirmText = 'Confirm', cancelText = 'Cancel') {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('confirmModal');
+        const confirmTitle = document.getElementById('confirmTitle');
+        const confirmMessage = document.getElementById('confirmMessage');
+        const confirmIcon = document.getElementById('confirmIcon');
+        const confirmOk = document.getElementById('confirmOk');
+        const confirmCancel = document.getElementById('confirmCancel');
+
+        // Set content
+        confirmTitle.textContent = title;
+        confirmMessage.textContent = message;
+        confirmOk.textContent = confirmText;
+        confirmCancel.textContent = cancelText;
+
+        // Set icon style
+        confirmIcon.className = `confirm-icon ${type}`;
+        let icon = 'exclamation-triangle';
+        switch (type) {
+          case 'danger': icon = 'exclamation-circle'; break;
+          case 'info': icon = 'info-circle'; break;
+          default: icon = 'exclamation-triangle';
+        }
+        confirmIcon.innerHTML = `<i class="fas fa-${icon}"></i>`;
+
+        // Set button color
+        if (type === 'danger') {
+          confirmOk.className = 'flex-1 py-3 px-4 bg-rose-600 hover:bg-red-600 text-white rounded-lg font-medium transition-colors';
+        } else if (type === 'warning') {
+          confirmOk.className = 'flex-1 py-3 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors';
+        } else {
+          confirmOk.className = 'flex-1 py-3 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors';
+        }
+
+        // Show modal
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        // Setup event listeners
+        const handleConfirm = () => {
+          cleanup();
+          resolve(true);
+        };
+
+        const handleCancel = () => {
+          cleanup();
+          resolve(false);
+        };
+
+        const handleKeyPress = (e) => {
+          if (e.key === 'Escape') handleCancel();
+          if (e.key === 'Enter') handleConfirm();
+        };
+
+        const cleanup = () => {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+          confirmOk.removeEventListener('click', handleConfirm);
+          confirmCancel.removeEventListener('click', handleCancel);
+          document.removeEventListener('keydown', handleKeyPress);
+        };
+
+        confirmOk.addEventListener('click', handleConfirm);
+        confirmCancel.addEventListener('click', handleCancel);
+        document.addEventListener('keydown', handleKeyPress);
+      });
+    }
+
+    /* ───────── API HELPER ───────── */
+    async function api(url, options = {}) {
+      try {
+        const res = await fetch(url, {
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          ...options,
+        });
+        return res.json();
+      } catch (error) {
+        showAlert('Failed to connect to server', 'error', 'Network Error');
+        throw error;
+      }
+    }
+
+    /* ───────── CREATE SESSION ───────── */
+    async function createSession() {
+      try {
+        showToast('info', 'Creating Session', 'Please wait...');
+        const data = await api(`${API}/new`, { method: "POST" });
+
+        if (data.error) {
+          showAlert(data.error, 'error', 'Creation Failed');
+          return;
+        }
+
+        showAlert('New WhatsApp session created successfully', 'success', 'Session Created');
+        showToast('success', 'Session Created', 'New session created successfully');
+        loadSessions();
+      } catch (error) {
+        showAlert('Failed to create new session', 'error', 'Creation Failed');
+      }
+    }
+
+    /* ───────── UPDATE STATS ───────── */
+    function updateStats(sessions) {
+      const total = sessions.length;
+      const connected = sessions.filter(s => s.status === "CONNECTED").length;
+      const disconnected = total - connected;
+
+      document.getElementById('totalSessions').textContent = total;
+      document.getElementById('connectedSessions').textContent = connected;
+      document.getElementById('disconnectedSessions').textContent = disconnected;
+
+      const now = new Date();
+      document.getElementById('lastUpdated').textContent =
+        `Last updated: ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+
+      const emptyState = document.getElementById('emptyState');
+      const loadingState = document.getElementById('loadingState');
+      if (total === 0) {
+        emptyState.classList.remove('hidden');
+        loadingState.classList.add('hidden');
+      } else {
+        emptyState.classList.add('hidden');
+        loadingState.classList.add('hidden');
+      }
+    }
+
+    /* ───────── FORMAT API KEY ───────── */
+    function formatApiKey(apiKey, showFull = false) {
+      if (!apiKey) return '';
+
+      if (showFull) {
+        return apiKey;
+      }
+
+      if (apiKey.length <= 12) {
+        return apiKey;
+      }
+
+      const firstPart = apiKey.substring(0, 8);
+      const lastPart = apiKey.substring(apiKey.length - 4);
+      const maskedLength = Math.max(apiKey.length - 12, 4);
+      const maskedPart = '•'.repeat(Math.min(maskedLength, 12));
+
+      return `${firstPart}${maskedPart}${lastPart}`;
+    }
+
+    /* ───────── COPY API KEY TO CLIPBOARD ───────── */
+    function copyApiKey(sessionId, apiKey) {
+      navigator.clipboard.writeText(apiKey)
+        .then(() => {
+          showToast('success', 'Copied!', 'API key copied to clipboard');
+
+          const copyBtn = document.getElementById(`copy-btn-${sessionId}`);
+          if (copyBtn) {
+            const originalHtml = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<i class="fas fa-check"></i>';
+            copyBtn.className = 'copy-success px-2 md:px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition-colors';
+
+            setTimeout(() => {
+              copyBtn.innerHTML = originalHtml;
+              copyBtn.className = 'bg-gray-800 hover:bg-blue-200 px-2 md:px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition-colors text-blue-600';
+            }, 2000);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to copy: ', err);
+          showAlert('Failed to copy API key', 'error', 'Copy Failed');
+        });
+    }
+
+    /* ───────── TOGGLE API KEY VISIBILITY ───────── */
+    function toggleApiKeyVisibility(sessionId, apiKey) {
+      apiKeyVisibility[sessionId] = !apiKeyVisibility[sessionId];
+
+      const apiKeyElement = document.getElementById(`api-key-${sessionId}`);
+      const eyeBtn = document.getElementById(`eye-btn-${sessionId}`);
+
+      if (apiKeyElement && eyeBtn) {
+        const isVisible = apiKeyVisibility[sessionId];
+        apiKeyElement.textContent = formatApiKey(apiKey, isVisible);
+        apiKeyElement.className = isVisible ? 'api-key-visible' : 'api-key-masked';
+
+        eyeBtn.innerHTML = isVisible
+          ? '<i class="fas fa-eye-slash"></i>'
+          : '<i class="fas fa-eye"></i>';
+        eyeBtn.title = isVisible ? 'Hide API key' : 'Show API key';
+        eyeBtn.setAttribute('aria-label', isVisible ? 'Hide API key' : 'Show API key');
+      }
+
+      localStorage.setItem(`apiKeyVisible_${sessionId}`, apiKeyVisibility[sessionId]);
+    }
+
+    /* ───────── LOAD SESSIONS ───────── */
+    async function loadSessions() {
+      try {
+        document.getElementById('loadingState').classList.remove('hidden');
+        document.getElementById('emptyState').classList.add('hidden');
+
+        const data = await api(`${API}/list`);
+        sessionsData = data.sessions;
+        const container = document.getElementById("sessions");
+        container.innerHTML = "";
+
+        updateStats(data.sessions);
+
+        data.sessions.forEach((s) => {
+          const statusClass =
+            s.status === "CONNECTED" ? "connected" :
+              s.status === "CREATED" ? "created" : "disconnected";
+
+          const statusIcon =
+            s.status === "CONNECTED" ? "fa-check-circle" :
+              s.status === "CREATED" ? "fa-qrcode" : "fa-exclamation-circle";
+
+          if (apiKeyVisibility[s._id] === undefined) {
+            apiKeyVisibility[s._id] = localStorage.getItem(`apiKeyVisible_${s._id}`) === 'true';
+          }
+
+          const isApiKeyVisible = apiKeyVisibility[s._id];
+          const displayedApiKey = formatApiKey(s.apiKey, isApiKeyVisible);
+
+          const card = document.createElement("div");
+          card.className = "bg-gray-900 border border-gray-800 hover:border-emerald-500/50 rounded-2xl p-5 md:p-6 shadow-xl transition-all group fade-in";
+          card.dataset.sessionId = s._id;
+          card.dataset.apiKey = s.apiKey;
+
+          card.innerHTML = `
+              <div class="flex justify-between items-start mb-4 flex-col md:flex-row gap-3">
+                <div class="flex-1 w-full">
+                  <div class="flex items-start gap-2 md:gap-3 mb-3">
+                    <div class="p-2 rounded-lg bg-gray-800 flex-shrink-0">
+                      <i class="fas fa-user-circle text-emerald-400"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <h3 class="font-semibold text-gray-200 text-sm md:text-base">Session ID</h3>
+                      <p class="text-xs md:text-sm text-gray-500 break-all session-id-truncate" title="${s._id}">${s._id}</p>
+                    </div>
+                  </div>
+                  
+                  <div class="mt-4">
+                    <h4 class="text-xs md:text-sm font-medium text-gray-400 mb-2 flex items-center gap-1">
+                      <i class="fas fa-key text-xs"></i>
+                      API Key
+                    </h4>
+                    <div class="api-key-container">
+                      <div class="flex-1 min-w-0">
+                        <span id="api-key-${s._id}" class="${isApiKeyVisible ? 'api-key-visible' : 'api-key-masked'} break-all text-xs md:text-sm" title="${s.apiKey}">
+                          ${displayedApiKey}
+                        </span>
+                      </div>
+                      <div class="flex items-center gap-1 ml-2 flex-shrink-0">
+                        <button
+                          id="copy-btn-${s._id}"
+                          onclick="copyApiKey('${s._id}', '${s.apiKey}')"
+                          class="bg-gray-800 hover:bg-blue-200 px-2 md:px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition-colors text-blue-600"
+                          title="Copy API key"
+                          aria-label="Copy API key"
+                        >
+                          <i class="fas fa-copy"></i>
+                          <span class="hidden xs:inline">Copy</span>
+                        </button>
+                        <button
+                          id="eye-btn-${s._id}"
+                          onclick="toggleApiKeyVisibility('${s._id}', '${s.apiKey}')"
+                          class="bg-gray-800/50 hover:bg-gray-200 px-2 md:px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition-colors text-gray-400"
+                          title="${isApiKeyVisible ? 'Hide API key' : 'Show API key'}"
+                          aria-label="${isApiKeyVisible ? 'Hide API key' : 'Show API key'}"
+                        >
+                          ${isApiKeyVisible ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  ${s.webhookUrl ? `
+                    <div class="mt-4">
+                      <h4 class="text-xs md:text-sm font-medium text-gray-400 mb-2 flex items-center gap-1">
+                        <i class="fas fa-link text-xs"></i>
+                        Webhook URL
+                      </h4>
+                      <div class="webhook-url" title="${s.webhookUrl}">
+                        ${s.webhookUrl.length > 60 ? s.webhookUrl.substring(0, 60) + '...' : s.webhookUrl}
+                      </div>
+                    </div>
+                  ` : ''}
+
+                  ${s.forwardingEnabled ? `
+                    <div class="mt-4">
+                      <h4 class="text-xs md:text-sm font-medium text-gray-400 mb-2 flex items-center gap-1">
+                        <i class="fas fa-share-square text-xs text-blue-400"></i>
+                        Forwarding Bot
+                      </h4>
+                      <div class="webhook-url bg-blue-500/10 border border-blue-500/20 text-blue-400 font-semibold" title="Forwarding to: ${s.forwardingTarget}">
+                        <i class="fas fa-arrow-right mr-1 text-xs"></i> Target: ${s.forwardingTarget}
+                      </div>
+                    </div>
+                  ` : ''}
+                </div>
+                
+                <div class="flex flex-col items-start md:items-end w-full md:w-auto">
+                  <span class="status-badge ${statusClass} flex items-center gap-1 mb-2 self-start md:self-end">
+                    <i class="fas ${statusIcon}"></i>
+                    ${s.status}
+                  </span>
+                  <span class="text-xs text-gray-400">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-4 border-t border-gray-800 action-buttons">
+                ${s.status !== "CONNECTED"
+              ? `
+                      <button onclick="openQR('${s._id}')"
+                        class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 px-3 md:px-4 py-2.5 rounded-lg text-xs md:text-sm font-medium text-white flex items-center justify-center gap-1 md:gap-2 transition-all">
+                        <i class="fas fa-qrcode"></i>
+                        <span class="hidden sm:inline">QR</span>
+                      </button>
+                      <button onclick="openPairModal('${s._id}')"
+                        class="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 px-3 md:px-4 py-2.5 rounded-lg text-xs md:text-sm font-medium text-white flex items-center justify-center gap-1 md:gap-2 transition-all">
+                        <i class="fas fa-link"></i>
+                        <span class="hidden sm:inline">Pair</span>
+                      </button>
+                    `
+              : `
+                      <button onclick="openMsgModal('${s._id}')"
+                        class="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 px-3 md:px-4 py-2.5 rounded-lg text-xs md:text-sm font-medium text-white flex items-center justify-center gap-1 md:gap-2 transition-all">
+                        <i class="fas fa-paper-plane"></i>
+                        <span class="hidden sm:inline">Send</span>
+                      </button>
+                      <button onclick="showInfo('${s._id}')"
+                        class="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 px-3 md:px-4 py-2.5 rounded-lg text-xs md:text-sm font-medium text-white flex items-center justify-center gap-1 md:gap-2 transition-all">
+                        <i class="fas fa-info-circle"></i>
+                        <span class="hidden sm:inline">Info</span>
+                      </button>
+
+                      <button onclick="window.location.href = '/message/history?sessionId=' + encodeURIComponent('${s._id}')"
+                        class="bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 px-3 md:px-4 py-2.5 rounded-lg text-xs md:text-sm font-medium text-white flex items-center justify-center gap-1 md:gap-2 transition-all">
+                        <i class="fas fa-history"></i>
+                        <span class="hidden sm:inline">History</span>
+                      </button>
+
+                      <button onclick="logoutSession('${s._id}')"
+                        class="btn-logout px-3 md:px-4 py-2.5 rounded-lg text-xs md:text-sm font-medium text-white flex items-center justify-center gap-1 md:gap-2 transition-all">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span class="hidden sm:inline">Logout</span>
+                      </button>
+                    `
+            }
+
+                <button onclick="openWebhookModal('${s._id}')"
+                  class="btn-webhook px-3 md:px-4 py-2.5 rounded-lg text-xs md:text-sm font-medium text-white flex items-center justify-center gap-1 md:gap-2 transition-all">
+                  <i class="fas fa-link"></i>
+                  <span class="hidden sm:inline">Webhook</span>
+                </button>
+
+                <button onclick="openForwardingModal('${s._id}')"
+                  class="bg-blue-600 hover:bg-blue-500 border border-blue-500/20 px-3 md:px-4 py-2.5 rounded-lg text-xs md:text-sm font-medium text-white flex items-center justify-center gap-1 md:gap-2 transition-all">
+                  <i class="fas fa-share-square"></i>
+                  <span class="hidden sm:inline">Forwarding</span>
+                </button>
+
+                <button onclick="deleteSession('${s._id}')"
+                  class="btn-danger px-3 md:px-4 py-2.5 rounded-lg text-xs md:text-sm font-medium text-white flex items-center justify-center gap-1 md:gap-2 transition-all">
+                  <i class="fas fa-trash"></i>
+                  <span class="hidden sm:inline">Delete</span>
+                </button>
+              </div>
+            `;
+
+          container.appendChild(card);
+        });
+
+        placeVendorCard();
+        await loadForwardingStats();
+
+      } catch (error) {
+        showAlert('Failed to load sessions', 'error', 'Load Failed');
+        document.getElementById('loadingState').classList.add('hidden');
+      }
+    }
+
+    /* ───────── LOAD FORWARDING STATS ───────── */
+    // Live counters from the order pipeline. The old forwarding/stats endpoint
+    // reads ForwardedOrder, which this workflow never writes, so those cards
+    // always showed zero and the row stayed hidden without a subscription.
+    async function loadForwardingStats() {
+      try {
+        const response = await fetch("/api/session/dashboard/stats");
+        const data = await response.json();
+        if (!data.success) return;
+
+        const set = (id, value) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = value;
+        };
+
+        set("totalSessions", data.instances.total);
+        set("connectedSessions", data.instances.connected);
+        set("disconnectedSessions", data.instances.offline);
+
+        document.getElementById("forwardingStatsRow").classList.remove("hidden");
+        set("fwTotal", data.today.forwarded);
+        set("fwResolved", data.today.resolved);
+        set("fwRejected", data.today.rejected);
+        set("fwPending", data.today.pending);
+
+        const stamp = document.getElementById("statsUpdatedAt");
+        if (stamp) stamp.textContent = "updated " + new Date(data.generatedAt).toLocaleTimeString();
+      } catch (err) {
+        console.error("Failed to load dashboard stats:", err);
+      }
+    }
+
+// The sessions grid is rebuilt on every load, so the vendor card is moved back
+    // into it afterwards. It then flows into the cell beside the session cards
+    // rather than sitting in a full-width band above them.
+    function placeVendorCard() {
+      const grid = document.getElementById("sessions");
+      const card = document.getElementById("vendorCard");
+      if (!grid || !card) return;
+      const host = document.getElementById("vendorCardHost");
+      if (host) host.classList.add("hidden");
+      grid.appendChild(card);
+      loadVendors();
+    }
+
+    /* ───────── VENDOR LIST ───────── */
+    // Vendor config lives on the session, so resolve one first.
+    let vendorSessionId = "";
+    async function activeSessionId() {
+      if (vendorSessionId) return vendorSessionId;
+      try {
+        const data = await (await fetch(`${API}/list`)).json();
+        const list = data.sessions || data || [];
+        vendorSessionId = list.length ? (list[0]._id || list[0].id || "") : "";
+      } catch (_) { vendorSessionId = ""; }
+      return vendorSessionId;
+    }
+
+    let vendorsLoading = false;
+    async function loadVendors() {
+      if (vendorsLoading) return;   // overlapping runs are what duplicated entries
+      const id = await activeSessionId();
+      if (!id) return;
+      vendorsLoading = true;
+      try {
+        const res = await fetch(`${API}/${id}/vendors`);
+        const data = await res.json();
+        if (!data.success) return;
+        document.getElementById("vendorNumbersInput").value = (data.vendorNumbers || []).join("\n");
+
+        // Rebuild the group list from scratch every time. Appending
+        // conditionally duplicated entries: loadVendors() runs from more than
+        // one place, and two concurrent calls both saw an unpopulated select
+        // before either had finished adding to it.
+        const sel = document.getElementById("vendorGroupInput");
+        const seen = new Map();
+        try {
+          const g = await (await fetch("/api/whatsapp/get/groups", { headers: { "x-api-key": data.apiKey || "" } })).json();
+          const groups = g.groups || g.data || [];
+          // Only vendor groups belong here. Offering every group invites picking
+          // the wrong one — the unmatched-review group especially, which would
+          // send completed work back into the review queue.
+          (Array.isArray(groups) ? groups : Object.values(groups))
+            .filter((grp) => grp && grp.id && /vendor/i.test(grp.subject || ""))
+            .forEach((grp) => seen.set(grp.id, grp.subject || grp.id));
+        } catch (_) { /* groups are optional */ }
+        if (data.vendorGroupJid && !seen.has(data.vendorGroupJid)) {
+          seen.set(data.vendorGroupJid, data.vendorGroupJid);
+        }
+
+        sel.innerHTML = '<option value="">— none —</option>';
+        for (const [id, label] of seen) {
+          const opt = document.createElement("option");
+          opt.value = id; opt.textContent = label;
+          sel.appendChild(opt);
+        }
+        sel.value = data.vendorGroupJid || "";
+
+        const list = document.getElementById("vendorActiveList");
+        list.innerHTML = (data.activeVendors || []).map(v =>
+          `<span class="bg-gray-800 text-gray-200 px-2 py-1 rounded">${v.name && v.name !== v.number ? v.name + " · " : ""}${v.number}</span>`
+        ).join("") || '<span class="text-gray-500">none configured</span>';
+        document.getElementById("vendorCount").textContent = (data.activeVendors || []).length + " active";
+      } catch (err) {
+        console.error("Failed to load vendors:", err);
+      } finally {
+        vendorsLoading = false;
+      }
+    }
+
+    async function saveVendors() {
+      const id = await activeSessionId();
+      const msg = document.getElementById("vendorSaveMsg");
+      if (!id) { msg.textContent = "No session yet"; msg.className = "text-xs text-amber-400"; return; }
+      const numbers = document.getElementById("vendorNumbersInput").value
+        .split(/[\n,]/).map(v => v.trim()).filter(Boolean);
+      try {
+        const res = await fetch(`${API}/${id}/set-vendors`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ vendorNumbers: numbers, vendorGroupJid: document.getElementById("vendorGroupInput").value }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          msg.textContent = "Saved — " + (data.activeVendors || []).length + " active vendor(s)";
+          msg.className = "text-xs text-emerald-400";
+          loadVendors();
+        } else {
+          msg.textContent = data.error || "Save failed";
+          msg.className = "text-xs text-rose-400";
+        }
+      } catch (err) {
+        msg.textContent = "Save failed"; msg.className = "text-xs text-rose-400";
+      }
+    }
+
+    // Keep the numbers current without a page reload.
+    setInterval(loadForwardingStats, 15000);
+    loadVendors();
+
+    /* ───────── SEARCH/FILTER SESSIONS ───────── */
+    function filterSessions() {
+      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+      const cards = document.querySelectorAll('.session-card');
+
+      cards.forEach(card => {
+        const sessionId = card.dataset.sessionId.toLowerCase();
+        const apiKey = card.dataset.apiKey.toLowerCase();
+        const status = card.querySelector('.status-badge').textContent.toLowerCase();
+
+        const matches = sessionId.includes(searchTerm) ||
+          apiKey.includes(searchTerm) ||
+          status.includes(searchTerm);
+
+        card.style.display = matches ? 'block' : 'none';
+      });
+    }
+
+    /* ───────── OPEN QR MODAL ───────── */
+    async function openQR(sessionId) {
+      activeQRSession = sessionId;
+      isQRModalClosing = false;
+      const modal = document.getElementById("qrModal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+
+      // Show status indicator
+      document.getElementById("qrStatus").classList.remove("hidden");
+
+      // Load initial QR
+      await loadQR();
+
+      // Start checking connection status
+      startQRConnectionCheck();
+    }
+
+    /* ───────── LOAD QR ───────── */
+    async function loadQR() {
+      if (!activeQRSession) return;
+
+      try {
+        const res = await api(`${API}/${activeQRSession}/qr`);
+        const qrBox = document.getElementById("qrBox");
+
+        if (res.qr) {
+          qrBox.innerHTML = `<img src="${res.qr}" class="bg-white p-2 rounded-lg w-56 h-56 md:w-64 md:h-64 shadow-lg border border-gray-300" />`;
+        } else {
+          // If no QR returned, session might already be connected
+          checkQRConnectionStatus();
+        }
+      } catch (error) {
+        showAlert('Failed to load QR code', 'error', 'QR Error');
+      }
+    }
+
+    /* ───────── CHECK QR CONNECTION STATUS ───────── */
+    async function checkQRConnectionStatus() {
+      if (!activeQRSession || isQRModalClosing) return;
+
+      try {
+        // Check session status
+        const sessions = await api(`${API}/list`);
+        const currentSession = sessions.sessions.find(s => s._id === activeQRSession);
+
+        if (currentSession && currentSession.status === "CONNECTED") {
+          // Session is connected, close modal
+          showAlert('WhatsApp session is now connected', 'success', 'Connected!');
+          closeQRModal();
+          loadSessions();
+        }
+      } catch (error) {
+        console.error('Error checking connection status:', error);
+      }
+    }
+
+    /* ───────── START QR CONNECTION CHECK INTERVAL ───────── */
+    function startQRConnectionCheck() {
+      // Clear any existing interval
+      if (qrCheckInterval) {
+        clearInterval(qrCheckInterval);
+      }
+
+      if (qrRefreshInterval) {
+        clearInterval(qrRefreshInterval);
+      }
+
+      // Check connection status every 2 seconds
+      qrCheckInterval = setInterval(() => {
+        if (!activeQRSession || isQRModalClosing) {
+          clearInterval(qrCheckInterval);
+          return;
+        }
+        checkQRConnectionStatus();
+      }, 2000);
+
+      // WhatsApp rotates the QR roughly every 20s. Without re-fetching it the
+      // modal keeps showing the first, now-expired code and scanning it does
+      // nothing until the socket gives up with a 408.
+      qrRefreshInterval = setInterval(() => {
+        if (!activeQRSession || isQRModalClosing) {
+          clearInterval(qrRefreshInterval);
+          return;
+        }
+        loadQR();
+      }, 15000);
+    }
+
+    /* ───────── CLOSE QR MODAL ───────── */
+    function closeQRModal() {
+      isQRModalClosing = true;
+
+      // Clear interval
+      if (qrCheckInterval) {
+        clearInterval(qrCheckInterval);
+        qrCheckInterval = null;
+      }
+
+      if (qrRefreshInterval) {
+        clearInterval(qrRefreshInterval);
+        qrRefreshInterval = null;
+      }
+
+      activeQRSession = null;
+      document.getElementById("qrModal").classList.add("hidden");
+
+      // Reset QR box
+      document.getElementById("qrBox").innerHTML = `
+          <div class="p-6 md:p-8 bg-white rounded-lg w-56 h-56 md:w-64 md:h-64 flex items-center justify-center border border-gray-300">
+            <div class="text-center">
+              <i class="fas fa-spinner loading-spin text-3xl md:text-4xl text-gray-400"></i>
+              <p class="text-gray-500 mt-4 text-sm md:text-base">Loading QR code...</p>
+            </div>
+          </div>`;
+
+      // Hide status indicator
+      document.getElementById("qrStatus").classList.add("hidden");
+    }
+
+    /* ───────── OPEN PAIR MODAL ───────── */
+    function openPairModal(sessionId) {
+      activePairSession = sessionId;
+      document.getElementById("pairPhone").value = "";
+      const modal = document.getElementById("pairModal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+
+      // Reset to step 1
+      document.getElementById("pairStep1").classList.remove("hidden");
+      document.getElementById("pairStep2").classList.add("hidden");
+      document.getElementById("getPairBtn").innerHTML = '<i class="fas fa-link"></i> Get Pair Code';
+      document.getElementById("getPairBtn").disabled = false;
+      document.getElementById("getPairBtn").onclick = getPairCode;
+
+      // Clear any existing interval
+      if (pairCodeInterval) {
+        clearInterval(pairCodeInterval);
+        pairCodeInterval = null;
+      }
+
+      // Reset closing flag
+      isPairModalClosing = false;
+
+      document.getElementById("pairPhone").focus();
+    }
+
+    /* ───────── CLOSE PAIR MODAL ───────── */
+    function closePairModal() {
+      // Set closing flag
+      isPairModalClosing = true;
+
+      // Clear interval
+      if (pairCodeInterval) {
+        clearInterval(pairCodeInterval);
+        pairCodeInterval = null;
+      }
+
+      activePairSession = null;
+      document.getElementById("pairModal").classList.add("hidden");
+    }
+
+    /* ───────── GET PAIR CODE ───────── */
+    async function getPairCode() {
+      const phone = document.getElementById("pairPhone").value;
+
+      if (!phone) {
+        showAlert('Phone number is required', 'warning', 'Validation Error');
+        document.getElementById("pairPhone").focus();
+        return;
+      }
+
+      if (!phone.startsWith('+')) {
+        showAlert('Phone number must start with country code (e.g., +1)', 'warning', 'Format Error');
+        document.getElementById("pairPhone").focus();
+        return;
+      }
+
+      try {
+        // Disable button and show loading
+        const getPairBtn = document.getElementById("getPairBtn");
+        getPairBtn.innerHTML = '<i class="fas fa-spinner loading-spin"></i> Generating...';
+        getPairBtn.disabled = true;
+
+        const res = await api(`${API}/${activePairSession}/pairCode`, {
+          method: "POST",
+          body: JSON.stringify({ number: phone }),
+        });
+
+        if (res.connected) {
+          showAlert('This session is already connected', 'success', 'Already Connected');
+          closePairModal();
+          loadSessions();
+          return;
+        }
+
+        if (!res.pairCode) {
+          throw new Error('No pair code received');
+        }
+
+        // Show step 2 with pair code
+        document.getElementById("pairStep1").classList.add("hidden");
+        document.getElementById("pairStep2").classList.remove("hidden");
+        document.getElementById("pairCodeDisplay").textContent = res.pairCode;
+
+        // Change button to show "Close"
+        getPairBtn.innerHTML = '<i class="fas fa-times"></i> Close';
+        getPairBtn.disabled = false;
+        getPairBtn.onclick = closePairModal;
+
+        // Start checking connection status
+        startCheckingConnection();
+
+      } catch (error) {
+        showAlert(error.message || 'Failed to get pair code', 'error', 'Pair Code Failed');
+
+        // Reset button
+        const getPairBtn = document.getElementById("getPairBtn");
+        getPairBtn.innerHTML = '<i class="fas fa-link"></i> Get Pair Code';
+        getPairBtn.disabled = false;
+      }
+    }
+
+    /* ───────── CHECK CONNECTION STATUS ───────── */
+    async function startCheckingConnection() {
+      if (pairCodeInterval) {
+        clearInterval(pairCodeInterval);
+      }
+
+      pairCodeInterval = setInterval(async () => {
+        // If modal is closing, stop checking
+        if (isPairModalClosing) {
+          clearInterval(pairCodeInterval);
+          return;
+        }
+
+        try {
+          // Check if session is connected
+          const sessions = await api(`${API}/list`);
+          const currentSession = sessions.sessions.find(s => s._id === activePairSession);
+
+          if (currentSession && currentSession.status === "CONNECTED") {
+            clearInterval(pairCodeInterval);
+
+            // Update button to show success
+            const getPairBtn = document.getElementById("getPairBtn");
+            getPairBtn.innerHTML = '<i class="fas fa-check"></i> Connected!';
+            getPairBtn.className = 'bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 md:px-5 py-3 rounded-xl font-medium text-white flex items-center justify-center gap-2 transition-all text-sm md:text-base order-1 sm:order-2';
+            getPairBtn.onclick = function () {
+              closePairModal();
+              loadSessions();
+            };
+
+            // Update waiting message
+            const waitingElement = document.querySelector('#pairStep2 .text-xs.text-gray-500');
+            if (waitingElement) {
+              waitingElement.innerHTML = '<i class="fas fa-check text-emerald-500"></i> Connected successfully!';
+              waitingElement.classList.remove('text-gray-500');
+              waitingElement.classList.add('text-emerald-600');
+            }
+
+            // Remove spinner
+            const spinner = document.getElementById('pairCodeSpinner');
+            if (spinner) {
+              spinner.classList.remove('fa-sync-alt', 'loading-spin', 'text-purple-500');
+              spinner.classList.add('fa-check', 'text-emerald-500');
+            }
+
+            // Show success alert after a short delay
+            setTimeout(() => {
+              showAlert('WhatsApp session is now connected', 'success', 'Connected!');
+            }, 500);
+
+            // Auto close modal after 2 seconds
+            setTimeout(() => {
+              if (!isPairModalClosing) {
+                closePairModal();
+                loadSessions();
+              }
+            }, 2000);
+          }
+        } catch (error) {
+          console.error('Error checking connection:', error);
+        }
+      }, 2000); // Check every 2 seconds
+    }
+
+    /* ───────── OPEN MESSAGE MODAL ───────── */
+    function openMsgModal(sessionId) {
+      activeMsgSession = sessionId;
+      document.getElementById("msgNumber").value = "";
+      document.getElementById("msgText").value = "";
+      const modal = document.getElementById("msgModal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+      document.getElementById("msgNumber").focus();
+    }
+
+    /* ───────── CLOSE MESSAGE MODAL ───────── */
+    function closeMsgModal() {
+      activeMsgSession = null;
+      document.getElementById("msgModal").classList.add("hidden");
+    }
+
+    /* ───────── SEND MESSAGE ───────── */
+    async function sendMsg() {
+      const number = document.getElementById("msgNumber").value;
+      const message = document.getElementById("msgText").value;
+
+      if (!number || !message) {
+        showAlert('Number & message are required', 'warning', 'Validation Error');
+        return;
+      }
+
+      try {
+        showToast('info', 'Sending', 'Sending message...');
+        await api(`${API}/${activeMsgSession}/send`, {
+          method: "POST",
+          body: JSON.stringify({ number, message }),
+        });
+
+        showAlert('WhatsApp message sent successfully', 'success', 'Message Sent');
+        showToast('success', 'Sent!', 'Message delivered');
+        closeMsgModal();
+      } catch (error) {
+        showAlert('Failed to send message', 'error', 'Send Failed');
+      }
+    }
+
+    /* ───────── OPEN WEBHOOK MODAL ───────── */
+    function openWebhookModal(sessionId) {
+      activeWebhookSession = sessionId;
+      const modal = document.getElementById("webhookModal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+
+        loadCurrentWebhook();
+      document.getElementById("webhookUrl").focus();
+    }
+
+    /* ───────── LOAD CURRENT WEBHOOK ───────── */
+    async function loadCurrentWebhook() {
+      try {
+        const currentSession = await api(`${API}/${activeWebhookSession}/webhook`);
+        const currentWebhookElement = document.getElementById("currentWebhook");
+        const secretBox = document.getElementById("webhookSecretBox");
+        const secretInput = document.getElementById("webhookSecret");
+        if (currentSession.webhookUrl) {
+          currentWebhookElement.textContent = currentSession.webhookUrl;
+          currentWebhookElement.title = currentSession.webhookUrl;
+          currentWebhookElement.className = "webhook-url bg-green-50 border border-green-200 text-green-800";
+        } else {
+          currentWebhookElement.textContent = "No webhook configured";
+          currentWebhookElement.title = "";
+          currentWebhookElement.className = "webhook-url bg-gray-50 border border-gray-200 text-gray-500";
+        }
+        secretInput.value = currentSession.webhookSecret || "";
+        secretBox.classList.toggle("hidden", !currentSession.webhookSecret);
+      } catch (error) {
+        console.error('Error loading webhook:', error);
+        const elem = document.getElementById("currentWebhook");
+        elem.textContent = "Error loading webhook";
+        elem.className = "webhook-url bg-red-50 border border-red-200 text-red-600";
+      }
+    }
+
+    /* ───────── SAVE WEBHOOK ───────── */
+    async function saveWebhook() {
+      const saveBtn = event.target;
+      const webhookUrl = document.getElementById("webhookUrl").value.trim();
+
+      // Validate URL format if not empty
+      if (webhookUrl !== "") {
+        try {
+          new URL(webhookUrl);
+          if (!webhookUrl.startsWith("https://")) {
+            showAlert('Webhook URL must use HTTPS', 'warning', 'Invalid URL');
+            return;
+          }
+        } catch (e) {
+          showAlert('Please enter a valid URL (e.g., https://example.com/webhook)', 'warning', 'Invalid URL Format');
+          return;
+        }
+      }
+
+      try {
+        // Disable button during save
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        const response = await api(`${API}/${activeWebhookSession}/set-webhook`, {
+          method: "POST",
+          body: JSON.stringify({ webhookUrl }),
+        });
+
+        if (response.success) {
+          if (webhookUrl === "") {
+            showAlert('Webhook URL cleared successfully', 'success', 'Webhook Cleared');
+          } else {
+            showAlert(`Webhook configured: ${webhookUrl}`, 'success', 'Webhook Updated');
+            document.getElementById("webhookSecret").value = response.webhookSecret || "";
+            document.getElementById("webhookSecretBox").classList.toggle("hidden", !response.webhookSecret);
+          }
+          loadSessions();
+          if (webhookUrl === "") closeWebhookModal();
+        }
+      } catch (error) {
+        console.error('Webhook save error:', error);
+        showAlert(error.message || 'Failed to save webhook URL', 'error', 'Save Failed');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save';
+      }
+    }
+
+    /* ───────── CLEAR WEBHOOK ───────── */
+    async function clearWebhook() {
+      try {
+        const confirmed = await showConfirm(
+          'Are you sure you want to remove the webhook URL? Events will no longer be sent to this endpoint.',
+          'Remove Webhook',
+          'warning',
+          'Remove',
+          'Cancel'
+        );
+
+        if (!confirmed) return;
+
+        const clearBtn = event.target;
+        clearBtn.disabled = true;
+        clearBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Clearing...';
+
+        const response = await api(`${API}/${activeWebhookSession}/set-webhook`, {
+          method: "POST",
+          body: JSON.stringify({ webhookUrl: "" }),
+        });
+
+        if (response.success) {
+          showAlert('Webhook URL removed successfully', 'success', 'Webhook Cleared');
+          closeWebhookModal();
+          loadSessions();
+        }
+      } catch (error) {
+        showAlert(error.message || 'Failed to clear webhook URL', 'error', 'Clear Failed');
+      } finally {
+        const clearBtn = document.querySelector('[onclick="clearWebhook()"]');
+        clearBtn.disabled = false;
+        clearBtn.innerHTML = '<i class="fas fa-trash"></i> Clear';
+      }
+    }
+
+    /* ───────── CLOSE WEBHOOK MODAL ───────── */
+    function closeWebhookModal() {
+      activeWebhookSession = null;
+      document.getElementById("webhookModal").classList.add("hidden");
+      document.getElementById("webhookUrl").value = "";
+      document.getElementById("webhookSecret").value = "";
+      document.getElementById("webhookSecretBox").classList.add("hidden");
+    }
+
+    async function copyWebhookSecret() {
+      const secret = document.getElementById("webhookSecret").value;
+      if (!secret) return;
+      try {
+        await navigator.clipboard.writeText(secret);
+        showToast('success', 'Copied', 'Signing secret copied');
+      } catch {
+        showAlert('Could not copy the signing secret', 'error', 'Copy Failed');
+      }
+    }
+
+    let activeForwardingSession = null;
+
+    /* ───────── OPEN FORWARDING MODAL ───────── */
+    function openForwardingModal(sessionId) {
+      activeForwardingSession = sessionId;
+      const modal = document.getElementById("forwardingModal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+      
+      const currentSession = (Array.isArray(sessionsData) ? sessionsData : []).find(
+        (s) => s._id === activeForwardingSession,
+      );
+      const isEnabled = currentSession && currentSession.forwardingEnabled;
+      const target =
+        currentSession && currentSession.forwardingTarget
+          ? currentSession.forwardingTarget.replace(/@s\.whatsapp\.net|@g\.us/, "")
+          : "";
+      
+      document.getElementById("forwardingEnabled").checked = !!isEnabled;
+      document.getElementById("forwardingStatusLabel").textContent = isEnabled ? "Enabled" : "Disabled";
+      document.getElementById("forwardingTarget").value = target;
+      
+      document.getElementById("forwardingTarget").focus();
+    }
+
+    /* ───────── CLOSE FORWARDING MODAL ───────── */
+    function closeForwardingModal() {
+      activeForwardingSession = null;
+      document.getElementById("forwardingModal").classList.add("hidden");
+      document.getElementById("forwardingModal").classList.remove("flex");
+      document.getElementById("forwardingTarget").value = "";
+      document.getElementById("forwardingEnabled").checked = false;
+    }
+
+    // Toggle status label dynamically on checkbox change
+    document.getElementById("forwardingEnabled").addEventListener("change", (e) => {
+      document.getElementById("forwardingStatusLabel").textContent = e.target.checked ? "Enabled" : "Disabled";
+    });
+
+    /* ───────── SAVE FORWARDING ───────── */
+    async function saveForwarding() {
+      const forwardingEnabled = document.getElementById("forwardingEnabled").checked;
+      const forwardingTarget = document.getElementById("forwardingTarget").value.trim();
+
+      if (forwardingEnabled && !forwardingTarget) {
+        showAlert('Please enter a target phone number or group JID', 'warning', 'Invalid Input');
+        return;
+      }
+
+      const saveBtn = document.querySelector('#forwardingModal button[onclick="saveForwarding()"]');
+      try {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        const response = await api(`${API}/${activeForwardingSession}/set-forwarding`, {
+          method: "POST",
+          body: JSON.stringify({ forwardingEnabled, forwardingTarget }),
+        });
+
+        if (response.success) {
+          showAlert('Forwarding settings updated successfully', 'success', 'Saved');
+          closeForwardingModal();
+          loadSessions();
+        }
+      } catch (error) {
+        console.error('Forwarding save error:', error);
+        showAlert(error.message || 'Failed to save forwarding settings', 'error', 'Save Failed');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = 'Save Config';
+      }
+    }
+
+    /* ───────── INFO MODAL ───────── */
+    async function showInfo(sessionId) {
+      try {
+        const info = await api(`${API}/${sessionId}/info`);
+        document.getElementById("infoContent").textContent = JSON.stringify(
+          info,
+          null,
+          2,
+        );
+        const modal = document.getElementById("infoModal");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+      } catch (error) {
+        showAlert('Failed to load session information', 'error', 'Info Failed');
+      }
+    }
+
+    function closeInfoModal() {
+      document.getElementById("infoModal").classList.add("hidden");
+    }
+
+    /* ───────── LOGOUT SESSION ───────── */
+    async function logoutSession(sessionId) {
+      try {
+        const confirmed = await showConfirm(
+          'Are you sure you want to logout this session? This will disconnect WhatsApp.',
+          'Logout Session',
+          'warning',
+          'Logout',
+          'Cancel'
+        );
+
+        if (!confirmed) return;
+
+        await api(`${API}/${sessionId}/logout`, { method: "POST" });
+        showAlert('Session has been logged out successfully', 'info', 'Logged Out');
+        loadSessions();
+      } catch (error) {
+        showAlert('Failed to logout session', 'error', 'Logout Failed');
+      }
+    }
+
+    /* ───────── DELETE SESSION ───────── */
+    async function deleteSession(sessionId) {
+      try {
+        const confirmed = await showConfirm(
+          'Are you sure you want to delete this session? This action cannot be undone.',
+          'Delete Session',
+          'danger',
+          'Delete',
+          'Cancel'
+        );
+
+        if (!confirmed) return;
+
+        await api(`${API}/${sessionId}/delete`, { method: "POST" });
+        showAlert('Session has been deleted successfully', 'info', 'Deleted');
+        loadSessions();
+      } catch (error) {
+        showAlert('Failed to delete session', 'error', 'Delete Failed');
+      }
+    }
+
+    /* ───────── INITIAL LOAD ───────── */
+    let analyticsChartObj = null;
+
+    async function loadAnalytics() {
+      try {
+        const data = await api(`${API}/analytics`);
+        if(data && data.success) {
+            const ctx = document.getElementById('analyticsChart').getContext('2d');
+            if(analyticsChartObj) analyticsChartObj.destroy();
+            
+            Chart.defaults.color = '#9ca3af';
+            Chart.defaults.font.family = 'Inter';
+            
+            analyticsChartObj = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: data.datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                    },
+                    scales: {
+                        y: { 
+                          beginAtZero: true, 
+                          grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                          ticks: { precision: 0 }
+                        },
+                        x: { grid: { color: 'rgba(255, 255, 255, 0.05)' } }
+                    },
+                    elements: {
+                        line: { tension: 0.4, borderWidth: 3 },
+                        point: { radius: 4, hitRadius: 10, hoverRadius: 6 }
+                    }
+                }
+            });
+        }
+      } catch(e) {
+         console.error('Analytics load failed', e);
+      }
+    }
+
+    loadSessions();
+    loadAnalytics();
+
+    // Close modals with Escape key
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        if (!isPairModalClosing) {
+          closeQRModal();
+          closePairModal();
+          closeMsgModal();
+          closeInfoModal();
+          closeWebhookModal();
+        }
+      }
+    });
+
+    // Initial fade-in animation
+    document.body.style.opacity = 0;
+    window.addEventListener('load', () => {
+      document.body.style.transition = 'opacity 0.5s ease';
+      document.body.style.opacity = 1;
+    });
+
+    // Add search clear button functionality
+    document.getElementById('searchInput').addEventListener('input', function () {
+      filterSessions();
+    });
+  </script>
+</body>
+
+</html>

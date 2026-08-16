@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WaFastApi | Recharge History</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f3f4f6; overflow-x: hidden; }
+        .glass-panel { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .status-badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+        .status-pending { background-color: rgba(234, 179, 8, 0.1); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.2); }
+        .status-approved { background-color: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); }
+        .status-rejected { background-color: rgba(244, 63, 94, 0.1); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.2); }
+        .method-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; background-color: rgba(56, 189, 248, 0.1); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.2); }
+        tr:hover { background-color: rgba(31, 41, 55, 0.5); }
+        .spinner { border: 4px solid rgba(16, 185, 129, 0.1); border-top: 4px solid #10b981; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="antialiased selection:bg-pink-500/30">
+
+    <!-- Shared Navigation (same as all other user pages) -->
+    <script src="/js/nav.js"></script>
+    <script>injectNav('wallet');</script>
+
+    <!-- Main Content -->
+    <div class="pt-24 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+            <div>
+                <h1 class="text-3xl font-extrabold text-white tracking-tight mb-2">Recharge History</h1>
+                <p class="text-gray-400 text-sm">Review your past wallet transactions and their statuses.</p>
+            </div>
+            <div class="flex gap-3">
+                <button id="newRechargeBtn" class="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg text-sm flex items-center gap-2">
+                    <i class="fas fa-plus"></i> New Recharge
+                </button>
+            </div>
+        </div>
+
+        <!-- States: Spinner -->
+        <div id="loadingSpinner" class="flex justify-center items-center py-20 hidden">
+            <div class="spinner"></div>
+        </div>
+
+        <!-- States: Error -->
+        <div id="errorContainer" class="bg-gray-900 border border-rose-800/30 rounded-2xl p-8 mb-8 text-center hidden">
+            <i class="fas fa-exclamation-triangle text-4xl text-rose-500 mb-4"></i>
+            <h2 id="errorTitle" class="text-xl font-bold text-rose-400 mb-2">Error</h2>
+            <p id="errorMessage" class="text-gray-400 text-sm mb-6">Something went wrong.</p>
+            <button id="retryBtn" class="bg-gray-800 hover:bg-gray-700 text-white px-5 py-2 rounded-xl font-medium transition-colors text-sm">Try Again</button>
+        </div>
+
+        <!-- Stats summary -->
+        <div id="statsContainer" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 hidden">
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-center gap-4 relative overflow-hidden">
+                <div class="absolute -right-4 -top-4 w-16 h-16 bg-blue-500/10 rounded-full blur-xl"></div>
+                <div class="w-12 h-12 rounded-xl bg-gray-800 flex items-center justify-center text-xl text-blue-400 border border-blue-500/20"><i class="fas fa-wallet"></i></div>
+                <div>
+                    <h3 class="text-xs text-gray-500 uppercase font-semibold">Total Recharge</h3>
+                    <p id="totalAmount" class="text-xl font-bold text-white">৳ 0</p>
+                </div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-center gap-4 relative overflow-hidden">
+                <div class="absolute -right-4 -top-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl"></div>
+                <div class="w-12 h-12 rounded-xl bg-gray-800 flex items-center justify-center text-xl text-emerald-500 border border-emerald-500/20"><i class="fas fa-check-circle"></i></div>
+                <div>
+                    <h3 class="text-xs text-gray-500 uppercase font-semibold">Approved</h3>
+                    <p id="approvedCount" class="text-xl font-bold text-white">0</p>
+                </div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-center gap-4 relative overflow-hidden">
+                <div class="absolute -right-4 -top-4 w-16 h-16 bg-yellow-500/10 rounded-full blur-xl"></div>
+                <div class="w-12 h-12 rounded-xl bg-gray-800 flex items-center justify-center text-xl text-yellow-500 border border-yellow-500/20"><i class="fas fa-clock"></i></div>
+                <div>
+                    <h3 class="text-xs text-gray-500 uppercase font-semibold">Pending</h3>
+                    <p id="pendingCount" class="text-xl font-bold text-white">0</p>
+                </div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-center gap-4 relative overflow-hidden">
+                <div class="absolute -right-4 -top-4 w-16 h-16 bg-rose-500/10 rounded-full blur-xl"></div>
+                <div class="w-12 h-12 rounded-xl bg-gray-800 flex items-center justify-center text-xl text-rose-500 border border-rose-500/20"><i class="fas fa-times-circle"></i></div>
+                <div>
+                    <h3 class="text-xs text-gray-500 uppercase font-semibold">Rejected</h3>
+                    <p id="rejectedCount" class="text-xl font-bold text-white">0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div id="filtersContainer" class="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-8 hidden shadow-xl relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
+            <div class="flex items-center gap-2 mb-4 text-emerald-400 font-bold tracking-tight"><i class="fas fa-filter text-sm"></i> Filters</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4 relative z-10">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Status</label>
+                    <select id="statusFilter" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2 text-sm outline-none focus:border-emerald-500 transition-colors">
+                        <option value="all">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Method</label>
+                    <select id="methodFilter" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2 text-sm outline-none focus:border-emerald-500 transition-colors">
+                        <option value="all">All Methods</option>
+                        <option value="bkash">bKash</option>
+                        <option value="nagad">Nagad</option>
+                        <option value="rocket">Rocket</option>
+                        <option value="card">Card</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Date From</label>
+                    <input type="date" id="dateFrom" class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-xl px-4 py-2 text-sm outline-none focus:border-emerald-500 transition-colors [color-scheme:dark]">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Date To</label>
+                    <input type="date" id="dateTo" class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-xl px-4 py-2 text-sm outline-none focus:border-emerald-500 transition-colors [color-scheme:dark]">
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-4 relative z-10">
+                <button id="resetFilters" disabled class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-5 py-2 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-2"><i class="fas fa-redo"></i> Reset</button>
+                <button id="applyFilters" disabled class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-emerald-500/20"><i class="fas fa-search"></i> Apply</button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div id="tableContainer" class="bg-gray-900 border border-gray-800 rounded-3xl overflow-hidden hidden shadow-2xl relative">
+            <div class="px-6 py-5 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
+                <h3 class="text-lg font-bold text-white tracking-tight">Ledger Records</h3>
+                <span class="text-xs text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full"><span id="recordCount">0</span> records</span>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse min-w-[800px]">
+                    <thead>
+                        <tr class="bg-gray-800/80 text-xs text-gray-400 font-semibold uppercase tracking-wider">
+                            <th class="px-6 py-4">Transaction ID</th>
+                            <th class="px-6 py-4">Context</th>
+                            <th class="px-6 py-4">Amount</th>
+                            <th class="px-6 py-4">Method</th>
+                            <th class="px-6 py-4">Date</th>
+                            <th class="px-6 py-4">Status</th>
+                            <th class="px-6 py-4">Note</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rechargeTableBody" class="divide-y divide-gray-800/50 text-gray-300 text-sm">
+                        <!-- Data rows injected by JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="noDataPlaceholder" class="py-16 text-center hidden">
+                <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gray-800/50 border border-gray-700/50 mb-4 shadow-inner">
+                    <i class="fas fa-inbox text-3xl text-gray-600"></i>
+                </div>
+                <h3 class="text-xl font-bold text-white mb-2">No History Found</h3>
+                <p class="text-sm text-gray-400 mb-6">You have no recharge records matching the criteria.</p>
+                <button id="makeFirstRecharge" class="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 mx-auto">
+                    <i class="fas fa-wallet"></i> Fund Account
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-8 border-t border-gray-800/50 bg-gray-900/30">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8 py-8">
+            <div class="text-center text-gray-500 text-xs font-medium">
+                <p>&copy; 2026 WaFastApi Payment Core. Secured by SSL <i class="fas fa-shield-alt text-emerald-500/70 ml-1"></i></p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Configuration - Update this to match your API endpoint
+        const RECHARGE_HISTORY_API = '/api/recharge/history';
+        
+        // Method display names
+        const methodNames = {
+            "bkash": "bKash",
+            "nagad": "Nagad",
+            "rocket": "Rocket",
+            "card": "Card"
+        };
+
+        // Method icons
+        const methodIcons = {
+            "bkash": "fas fa-mobile-alt",
+            "nagad": "fas fa-university",
+            "rocket": "fas fa-rocket",
+            "card": "fas fa-credit-card"
+        };
+
+        // State
+        let allRecharges = [];
+        let filteredRecharges = [];
+
+        // DOM Elements
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const errorContainer = document.getElementById('errorContainer');
+        const errorTitle = document.getElementById('errorTitle');
+        const errorMessage = document.getElementById('errorMessage');
+        const statsContainer = document.getElementById('statsContainer');
+        const filtersContainer = document.getElementById('filtersContainer');
+        const tableContainer = document.getElementById('tableContainer');
+        const rechargeTableBody = document.getElementById('rechargeTableBody');
+        const noDataPlaceholder = document.getElementById('noDataPlaceholder');
+        const recordCount = document.getElementById('recordCount');
+        const totalAmount = document.getElementById('totalAmount');
+        const approvedCount = document.getElementById('approvedCount');
+        const pendingCount = document.getElementById('pendingCount');
+        const rejectedCount = document.getElementById('rejectedCount');
+        const statusFilter = document.getElementById('statusFilter');
+        const methodFilter = document.getElementById('methodFilter');
+        const dateFrom = document.getElementById('dateFrom');
+        const dateTo = document.getElementById('dateTo');
+        const applyFilters = document.getElementById('applyFilters');
+        const resetFilters = document.getElementById('resetFilters');
+        const newRechargeBtn = document.getElementById('newRechargeBtn');
+        const retryBtn = document.getElementById('retryBtn');
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const navLinks = document.getElementById('navLinks');
+        const makeFirstRecharge = document.getElementById('makeFirstRecharge');
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchRechargeHistory();
+            setupEventListeners();
+            
+            // Set date range defaults (last 30 days)
+            const today = new Date();
+            const lastMonth = new Date();
+            lastMonth.setDate(today.getDate() - 30);
+            
+            dateFrom.valueAsDate = lastMonth;
+            dateTo.valueAsDate = today;
+        });
+
+        // Fetch recharge history from API
+        async function fetchRechargeHistory() {
+            showLoading();
+            hideError();
+            
+            try {
+                const response = await fetch(RECHARGE_HISTORY_API, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        // Add authorization header if needed
+                        // 'Authorization': 'Bearer ' + localStorage.getItem('token')
+                    },
+                    credentials: 'include' // Include cookies for session-based auth
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                // Handle different response formats
+                if (Array.isArray(data)) {
+                    allRecharges = data;
+                } else if (data.recharges && Array.isArray(data.recharges)) {
+                    allRecharges = data.recharges;
+                } else if (data.data && Array.isArray(data.data)) {
+                    allRecharges = data.data;
+                } else if (data.success && data.data) {
+                    allRecharges = data.data;
+                } else {
+                    throw new Error('Invalid response format from API');
+                }
+
+                // Sort by date (newest first)
+                allRecharges.sort((a, b) => new Date(b.createdAt || b.date || b.created_at) - new Date(a.createdAt || a.date || a.created_at));
+                
+                // Update UI with data
+                updateStats(allRecharges);
+                filteredRecharges = [...allRecharges];
+                renderRechargeTable(filteredRecharges);
+                
+                showContent();
+                
+                // Enable buttons if we have data
+                applyFilters.disabled = allRecharges.length === 0;
+                resetFilters.disabled = allRecharges.length === 0;
+                
+            } catch (error) {
+                console.error('Error fetching recharge history:', error);
+                
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    showError('Network Error', 'Unable to connect to the server. Please check your internet connection and try again.');
+                } else if (error.message.includes('401') || error.message.includes('403')) {
+                    showError('Access Denied', 'You need to be logged in to view recharge history.');
+                } else if (error.message.includes('404')) {
+                    showError('Not Found', 'The recharge history endpoint was not found.');
+                } else if (error.message.includes('500')) {
+                    showError('Server Error', 'Internal server error. Please try again later.');
+                } else {
+                    showError('API Error', error.message || 'Failed to load recharge history. Please try again later.');
+                }
+            }
+        }
+
+        // Update statistics
+        function updateStats(recharges) {
+            let total = 0;
+            let approved = 0;
+            let pending = 0;
+            let rejected = 0;
+            
+            recharges.forEach(recharge => {
+                total += recharge.amount || 0;
+                
+                const status = recharge.status?.toLowerCase() || 'pending';
+                switch(status) {
+                    case 'approved':
+                    case 'success':
+                        approved++;
+                        break;
+                    case 'pending':
+                    case 'processing':
+                        pending++;
+                        break;
+                    case 'rejected':
+                    case 'failed':
+                    case 'cancelled':
+                        rejected++;
+                        break;
+                }
+            });
+            
+            totalAmount.textContent = `৳ ${total.toLocaleString()}`;
+            approvedCount.textContent = approved;
+            pendingCount.textContent = pending;
+            rejectedCount.textContent = rejected;
+        }
+
+        // Render recharge table with data
+        function renderRechargeTable(recharges) {
+            // Clear table body
+            rechargeTableBody.innerHTML = '';
+            
+            // Update record count
+            recordCount.textContent = recharges.length;
+            
+            // If no recharges, show placeholder
+            if (recharges.length === 0) {
+                noDataPlaceholder.style.display = 'block';
+                tableContainer.style.display = 'block';
+                return;
+            }
+            
+            // Hide placeholder and show table
+            noDataPlaceholder.style.display = 'none';
+            tableContainer.style.display = 'block';
+            
+            // Add recharge rows
+            recharges.forEach((recharge, index) => {
+                const row = document.createElement('tr');
+                
+                // Format date
+                const date = new Date(recharge.createdAt || recharge.date || recharge.created_at);
+                const formattedDate = date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+                const formattedTime = date.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                // Status badge
+                let statusClass = '';
+                let statusText = '';
+                const status = recharge.status?.toLowerCase() || 'pending';
+                
+                switch(status) {
+                    case 'pending':
+                    case 'processing':
+                        statusClass = 'status-pending';
+                        statusText = 'Pending';
+                        break;
+                    case 'approved':
+                    case 'success':
+                    case 'completed':
+                        statusClass = 'status-approved';
+                        statusText = 'Approved';
+                        break;
+                    case 'rejected':
+                    case 'failed':
+                    case 'cancelled':
+                        statusClass = 'status-rejected';
+                        statusText = 'Rejected';
+                        break;
+                    default:
+                        statusClass = 'status-pending';
+                        statusText = 'Pending';
+                }
+                
+                // Method badge
+                const method = recharge.method?.toLowerCase() || recharge.payment_method || 'unknown';
+                const methodName = methodNames[method] || method.charAt(0).toUpperCase() + method.slice(1);
+                const methodIcon = methodIcons[method] || 'fas fa-wallet';
+                
+                // Truncate admin note if too long
+                const adminNote = recharge.adminNote || recharge.note || recharge.remarks || '';
+                const truncatedNote = adminNote.length > 30 ? adminNote.substring(0, 30) + '...' : adminNote;
+                
+                // Ensure all values exist
+                const transactionId = recharge.transactionId || recharge.transaction_id || recharge.id || 'N/A';
+                const mobileNumber = recharge.number || recharge.mobile_number || recharge.phone || 'N/A';
+                const amount = recharge.amount || 0;
+                
+                row.innerHTML = `
+                    <td>
+                        <div style="font-weight: 600; font-size: 13px;">${transactionId}</div>
+                        <div style="font-size: 11px; color: var(--gray);">${recharge.id || ''}</div>
+                    </td>
+                    <td>
+                        <div style="font-weight: 500;">${mobileNumber}</div>
+                        <div style="font-size: 11px; color: var(--gray);">Bangladesh</div>
+                    </td>
+                    <td>
+                        <div style="font-weight: 700; font-size: 16px;">৳ ${amount.toLocaleString()}</div>
+                    </td>
+                    <td>
+                        <div class="method-badge">
+                            <i class="${methodIcon}"></i>
+                            ${methodName}
+                        </div>
+                    </td>
+                    <td>
+                        <div style="font-weight: 500; font-size: 13px;">${formattedDate}</div>
+                        <div style="font-size: 11px; color: var(--gray);">${formattedTime}</div>
+                    </td>
+                    <td>
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                    </td>
+                    <td>
+                        <div style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px;" title="${adminNote}">
+                            ${truncatedNote}
+                        </div>
+                    </td>
+                `;
+                
+                rechargeTableBody.appendChild(row);
+            });
+        }
+
+        // Apply filters to recharge data
+        function applyFiltersToData() {
+            const statusFilterValue = statusFilter.value;
+            const methodFilterValue = methodFilter.value;
+            const dateFromValue = dateFrom.value;
+            const dateToValue = dateTo.value;
+            
+            filteredRecharges = [...allRecharges];
+            
+            // Apply status filter
+            if (statusFilterValue !== 'all') {
+                filteredRecharges = filteredRecharges.filter(recharge => {
+                    const status = recharge.status?.toLowerCase() || 'pending';
+                    if (statusFilterValue === 'approved') {
+                        return status === 'approved' || status === 'success' || status === 'completed';
+                    } else if (statusFilterValue === 'rejected') {
+                        return status === 'rejected' || status === 'failed' || status === 'cancelled';
+                    } else {
+                        return status === statusFilterValue;
+                    }
+                });
+            }
+            
+            // Apply method filter
+            if (methodFilterValue !== 'all') {
+                filteredRecharges = filteredRecharges.filter(recharge => {
+                    const method = recharge.method?.toLowerCase() || recharge.payment_method || '';
+                    return method === methodFilterValue;
+                });
+            }
+            
+            // Apply date filter
+            if (dateFromValue) {
+                const fromDate = new Date(dateFromValue);
+                filteredRecharges = filteredRecharges.filter(recharge => {
+                    const rechargeDate = new Date(recharge.createdAt || recharge.date || recharge.created_at);
+                    return rechargeDate >= fromDate;
+                });
+            }
+            
+            if (dateToValue) {
+                const toDate = new Date(dateToValue);
+                toDate.setHours(23, 59, 59, 999);
+                filteredRecharges = filteredRecharges.filter(recharge => {
+                    const rechargeDate = new Date(recharge.createdAt || recharge.date || recharge.created_at);
+                    return rechargeDate <= toDate;
+                });
+            }
+            
+            // Update stats and render filtered results
+            updateStats(filteredRecharges);
+            renderRechargeTable(filteredRecharges);
+        }
+
+        // Reset filters
+        function resetAllFilters() {
+            statusFilter.value = 'all';
+            methodFilter.value = 'all';
+            
+            // Reset to default date range (last 30 days)
+            const today = new Date();
+            const lastMonth = new Date();
+            lastMonth.setDate(today.getDate() - 30);
+            
+            dateFrom.valueAsDate = lastMonth;
+            dateTo.valueAsDate = today;
+            
+            filteredRecharges = [...allRecharges];
+            updateStats(filteredRecharges);
+            renderRechargeTable(filteredRecharges);
+        }
+
+        // Export data as CSV
+        function exportToCSV() {
+            if (filteredRecharges.length === 0) return;
+            
+            const headers = ['Transaction ID', 'Mobile Number', 'Amount', 'Method', 'Date', 'Status', 'Admin Note'];
+            const csvData = filteredRecharges.map(recharge => {
+                const date = new Date(recharge.createdAt || recharge.date || recharge.created_at);
+                const formattedDate = date.toLocaleDateString('en-US');
+                const formattedTime = date.toLocaleTimeString('en-US');
+                
+                return [
+                    recharge.transactionId || recharge.transaction_id || recharge.id || '',
+                    recharge.number || recharge.mobile_number || recharge.phone || '',
+                    recharge.amount || 0,
+                    methodNames[recharge.method] || recharge.method || '',
+                    `${formattedDate} ${formattedTime}`,
+                    recharge.status || 'pending',
+                    recharge.adminNote || recharge.note || recharge.remarks || ''
+                ];
+            });
+            
+            const csvContent = [
+                headers.join(','),
+                ...csvData.map(row => row.map(cell => `"${cell}"`).join(','))
+            ].join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute('href', url);
+            link.setAttribute('download', `recharge_history_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        // Setup event listeners
+        function setupEventListeners() {
+            // Apply filters button
+            applyFilters.addEventListener('click', applyFiltersToData);
+            
+            // Reset filters button
+            resetFilters.addEventListener('click', resetAllFilters);
+            
+            // New recharge button
+            newRechargeBtn.addEventListener('click', function() {
+                window.location.href = '/recharge';
+            });
+            
+            
+            // Retry button
+            retryBtn.addEventListener('click', fetchRechargeHistory);
+            
+            // Make first recharge button
+            makeFirstRecharge.addEventListener('click', function() {
+                window.location.href = '/recharge';
+            });
+            
+            // Mobile menu button
+            mobileMenuBtn.addEventListener('click', function() {
+                navLinks.classList.toggle('active');
+                // Toggle menu icon
+                const icon = mobileMenuBtn.querySelector('i');
+                if (icon.classList.contains('fa-bars')) {
+                    icon.classList.remove('fa-bars');
+                    icon.classList.add('fa-times');
+                } else {
+                    icon.classList.remove('fa-times');
+                    icon.classList.add('fa-bars');
+                }
+            });
+            
+            // Close mobile menu when clicking outside
+            document.addEventListener('click', function(event) {
+                if (!navLinks.contains(event.target) && !mobileMenuBtn.contains(event.target)) {
+                    navLinks.classList.remove('active');
+                    const icon = mobileMenuBtn.querySelector('i');
+                    icon.classList.remove('fa-times');
+                    icon.classList.add('fa-bars');
+                }
+            });
+            
+            // Filter change events
+            [statusFilter, methodFilter, dateFrom, dateTo].forEach(element => {
+                element.addEventListener('change', function() {
+                    applyFilters.disabled = allRecharges.length === 0;
+                });
+            });
+            
+            // Close mobile menu when clicking a link
+            navLinks.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', function() {
+                    navLinks.classList.remove('active');
+                    const icon = mobileMenuBtn.querySelector('i');
+                    icon.classList.remove('fa-times');
+                    icon.classList.add('fa-bars');
+                });
+            });
+        }
+
+        // UI State Management
+        function showLoading() {
+            loadingSpinner.style.display = 'flex';
+            errorContainer.style.display = 'none';
+            statsContainer.style.display = 'none';
+            filtersContainer.style.display = 'none';
+            tableContainer.style.display = 'none';
+        }
+        
+        function showError(title, message) {
+            loadingSpinner.style.display = 'none';
+            errorContainer.style.display = 'block';
+            errorTitle.textContent = title;
+            errorMessage.textContent = message;
+            statsContainer.style.display = 'none';
+            filtersContainer.style.display = 'none';
+            tableContainer.style.display = 'none';
+        }
+        
+        function hideError() {
+            errorContainer.style.display = 'none';
+        }
+        
+        function showContent() {
+            loadingSpinner.style.display = 'none';
+            errorContainer.style.display = 'none';
+            statsContainer.style.display = 'grid';
+            filtersContainer.style.display = 'block';
+            tableContainer.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

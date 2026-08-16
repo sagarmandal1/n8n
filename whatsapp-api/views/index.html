@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi — Professional WhatsApp API Platform</title>
+    <meta name="description" content="Connect, automate, and scale WhatsApp messaging for your business. Multi-session API, bulk campaigns, smart chatbots and instant webhooks.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --green: #10b981;
+            --green-dark: #059669;
+            --green-glow: rgba(16,185,129,0.18);
+        }
+        * { box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background-color: #020815; color: #f1f5f9; overflow-x: hidden; }
+        
+        /* Animated gradient background */
+        .hero-bg {
+            position: absolute; inset: 0; overflow: hidden; z-index: 0;
+        }
+        .hero-bg::before {
+            content: '';
+            position: absolute;
+            width: 1000px; height: 1000px;
+            background: radial-gradient(circle, rgba(16,185,129,0.12) 0%, transparent 65%);
+            top: -300px; left: 50%; transform: translateX(-50%);
+            animation: pulseGlow 6s ease-in-out infinite;
+        }
+        .hero-bg::after {
+            content: '';
+            position: absolute;
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 65%);
+            top: 100px; right: -200px;
+            animation: pulseGlow 8s ease-in-out infinite reverse;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+            50% { opacity: 1; transform: translateX(-50%) scale(1.08); }
+        }
+
+        /* Grid pattern */
+        .grid-pattern {
+            position: absolute; inset: 0; z-index: 0;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 48px 48px;
+            mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
+        }
+
+        /* Glass nav */
+        .glass-nav {
+            background: rgba(2, 8, 21, 0.7);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+
+        /* Gradient text */
+        .text-gradient {
+            background: linear-gradient(135deg, #34d399 0%, #10b981 40%, #6ee7b7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .text-gradient-purple {
+            background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Feature cards */
+        .feat-card {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(255,255,255,0.06);
+            transition: all 0.3s cubic-bezier(.17,.67,.53,.97);
+        }
+        .feat-card:hover {
+            border-color: rgba(16,185,129,0.3);
+            transform: translateY(-6px);
+            box-shadow: 0 24px 60px -10px rgba(16,185,129,0.12), 0 0 0 1px rgba(16,185,129,0.08);
+        }
+        .feat-icon {
+            width: 52px; height: 52px; border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; margin-bottom: 20px;
+        }
+
+        /* Stat cards */
+        .stat-card {
+            background: linear-gradient(135deg, rgba(15,23,42,0.9) 0%, rgba(5,15,35,0.9) 100%);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 20px; padding: 28px 32px;
+            text-align: center; position: relative; overflow: hidden;
+        }
+        .stat-card::before {
+            content: ''; position: absolute;
+            top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--green), transparent);
+        }
+
+        /* Pricing */
+        .plan-card {
+            background: rgba(10,18,35,0.9);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 24px; padding: 32px;
+            display: flex; flex-direction: column;
+            transition: all 0.3s ease;
+        }
+        .plan-card:hover { border-color: rgba(16,185,129,0.25); transform: translateY(-4px); }
+        .plan-card.popular {
+            background: linear-gradient(145deg, rgba(16,185,129,0.08) 0%, rgba(10,18,35,0.95) 50%);
+            border-color: rgba(16,185,129,0.4);
+        }
+
+        /* CTA button */
+        .btn-primary {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white; border-radius: 50px;
+            font-weight: 700; transition: all 0.2s;
+            box-shadow: 0 4px 24px rgba(16,185,129,0.3);
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 8px 32px rgba(16,185,129,0.4);
+        }
+        .btn-primary:active { transform: scale(0.98); }
+
+        .btn-ghost {
+            background: rgba(255,255,255,0.05);
+            color: white; border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 50px; font-weight: 600; transition: all 0.2s;
+        }
+        .btn-ghost:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+
+        /* Badge */
+        .badge-live {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 16px; border-radius: 50px;
+            background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25);
+            color: #34d399; font-size: 13px; font-weight: 600;
+        }
+        .ping-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #10b981; position: relative;
+        }
+        .ping-dot::before {
+            content: ''; position: absolute;
+            inset: -3px; border-radius: 50%; background: rgba(16,185,129,0.4);
+            animation: ping 1.5s cubic-bezier(0,0,.2,1) infinite;
+        }
+        @keyframes ping { 75%,100% { transform: scale(2); opacity: 0; } }
+
+        /* Scroll fade-in */
+        .fade-up {
+            opacity: 0; transform: translateY(30px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+        .fade-up.visible { opacity: 1; transform: translateY(0); }
+
+        /* Dashboard preview mockup */
+        .mockup-window {
+            background: rgba(10,18,35,0.95);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px; overflow: hidden;
+            box-shadow: 0 40px 100px -20px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.05);
+        }
+        .mockup-bar {
+            background: rgba(5,10,25,0.9);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            padding: 12px 16px; display: flex; align-items: center; gap: 8px;
+        }
+        .mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+        /* Floating badge animation */
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+        .float-anim { animation: float 3s ease-in-out infinite; }
+
+        /* Ticker animation */
+        .ticker { animation: ticker 20s linear infinite; }
+        @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+        /* Mobile menu */
+        #mobile-menu { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; }
+        #mobile-menu.open { max-height: 400px; }
+
+        /* Number counter */
+        .counter { display: inline-block; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- ═══ NAVBAR ═══ -->
+    <nav class="glass-nav fixed top-0 w-full z-50 transition-all">
+        <div class="max-w-7xl mx-auto px-5 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo -->
+                <a href="/" class="flex items-center gap-2.5 flex-shrink-0">
+                    <div class="w-9 h-9 bg-gradient-to-br from-emerald-400 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                        <i class="fab fa-whatsapp text-white text-lg"></i>
+                    </div>
+                    <span class="text-lg font-black tracking-tight text-white">Wa<span class="text-gradient">Fast</span>Api</span>
+                </a>
+
+                <!-- Desktop Links -->
+                <div class="hidden md:flex items-center gap-1">
+                    <a href="#features" class="text-gray-400 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-white/5">Features</a>
+                    <a href="#pricing" class="text-gray-400 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-white/5">Pricing</a>
+                    <a href="/doc" class="text-gray-400 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-white/5">API Docs</a>
+                </div>
+
+                <!-- CTA -->
+                <div class="hidden md:flex items-center gap-3">
+                    <a href="/login" class="text-gray-300 hover:text-white text-sm font-medium transition-colors px-4 py-2">Sign In</a>
+                    <a href="/register" class="btn-primary text-sm px-5 py-2.5 inline-block">Get Started Free</a>
+                </div>
+
+                <!-- Mobile burger -->
+                <button id="burger" class="md:hidden w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 text-gray-400" onclick="document.getElementById('mobile-menu').classList.toggle('open')">
+                    <i class="fas fa-bars text-sm"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Menu -->
+        <div id="mobile-menu" class="md:hidden border-t border-white/5 bg-[#020815]">
+            <div class="px-5 py-4 space-y-1">
+                <a href="#features" class="flex items-center gap-2 text-gray-300 hover:text-white px-3 py-2.5 rounded-lg hover:bg-white/5 text-sm font-medium transition-colors"><i class="fas fa-rocket w-4"></i> Features</a>
+                <a href="#pricing" class="flex items-center gap-2 text-gray-300 hover:text-white px-3 py-2.5 rounded-lg hover:bg-white/5 text-sm font-medium transition-colors"><i class="fas fa-tag w-4"></i> Pricing</a>
+                <a href="/doc" class="flex items-center gap-2 text-gray-300 hover:text-white px-3 py-2.5 rounded-lg hover:bg-white/5 text-sm font-medium transition-colors"><i class="fas fa-code w-4"></i> API Docs</a>
+                <hr class="border-white/5 my-2">
+                <a href="/login" class="flex items-center gap-2 text-gray-300 hover:text-white px-3 py-2.5 rounded-lg hover:bg-white/5 text-sm font-medium transition-colors"><i class="fas fa-sign-in-alt w-4"></i> Sign In</a>
+                <a href="/register" class="btn-primary text-sm px-5 py-3 text-center block rounded-xl mt-2">Get Started Free</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ═══ HERO ═══ -->
+    <section class="relative min-h-screen flex items-center pt-16 pb-20 px-5">
+        <div class="hero-bg"></div>
+        <div class="grid-pattern"></div>
+
+        <div class="max-w-6xl mx-auto relative z-10 w-full">
+            <div class="grid lg:grid-cols-2 gap-16 items-center">
+
+                <!-- Left Content -->
+                <div>
+                    <div class="badge-live mb-8 inline-flex fade-up visible">
+                        <span class="ping-dot"></span>
+                        Platform Fully Operational · v2.0
+                    </div>
+
+                    <h1 class="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight mb-6 fade-up visible">
+                        WhatsApp API<br>
+                        <span class="text-gradient">Built for Scale</span>
+                    </h1>
+
+                    <p class="text-gray-400 text-lg leading-relaxed mb-8 max-w-lg fade-up visible">
+                        Multi-session management, bulk campaigns, AI chatbots, and real-time webhooks — all in one powerful platform for your business.
+                    </p>
+
+                    <div class="flex flex-col sm:flex-row gap-4 mb-12 fade-up visible">
+                        <a href="/register" class="btn-primary text-base px-8 py-4 text-center inline-flex items-center justify-center gap-2">
+                            <i class="fas fa-rocket"></i> Start Free Trial
+                        </a>
+                        <a href="/login" class="btn-ghost text-base px-8 py-4 text-center inline-flex items-center justify-center gap-2">
+                            <i class="fas fa-sign-in-alt text-emerald-400"></i> Sign in to Dashboard
+                        </a>
+                    </div>
+
+                    <!-- Trust signals -->
+                    <div class="flex items-center gap-6 text-sm text-gray-500 fade-up visible">
+                        <div class="flex items-center gap-2"><i class="fas fa-check-circle text-emerald-500"></i> No credit card required</div>
+                        <div class="flex items-center gap-2"><i class="fas fa-check-circle text-emerald-500"></i> Cancel anytime</div>
+                    </div>
+                </div>
+
+                <!-- Right: Mockup Dashboard -->
+                <div class="relative fade-up visible hidden lg:block">
+                    <!-- Floating badges -->
+                    <div class="float-anim absolute -top-6 -left-4 z-20 bg-gray-900 border border-emerald-500/30 rounded-2xl px-4 py-3 shadow-2xl text-sm font-semibold text-emerald-400" style="animation-delay:0.5s">
+                        <i class="fas fa-bolt mr-2 text-yellow-400"></i> 1,247 msgs sent today
+                    </div>
+                    <div class="float-anim absolute -bottom-4 -right-4 z-20 bg-gray-900 border border-purple-500/30 rounded-2xl px-4 py-3 shadow-2xl text-sm" style="animation-delay:1.5s">
+                        <span class="text-emerald-400 font-bold">● CONNECTED</span>
+                        <span class="text-gray-400 ml-2">3 sessions live</span>
+                    </div>
+
+                    <div class="mockup-window">
+                        <div class="mockup-bar">
+                            <div class="mockup-dot bg-rose-500"></div>
+                            <div class="mockup-dot bg-yellow-500"></div>
+                            <div class="mockup-dot bg-emerald-500"></div>
+                            <div class="flex-1 text-center text-xs text-gray-500 font-mono">wafastapi.com/sessions</div>
+                        </div>
+                        <!-- Mini dashboard preview -->
+                        <div class="p-5 space-y-3 bg-[#050e1e]">
+                            <!-- Stats row -->
+                            <div class="grid grid-cols-3 gap-3 mb-4">
+                                <div class="bg-gray-800/60 rounded-xl p-3 text-center">
+                                    <div class="text-emerald-400 font-black text-xl">3</div>
+                                    <div class="text-gray-500 text-[10px] uppercase font-semibold mt-0.5">Sessions</div>
+                                </div>
+                                <div class="bg-gray-800/60 rounded-xl p-3 text-center">
+                                    <div class="text-blue-400 font-black text-xl">12K</div>
+                                    <div class="text-gray-500 text-[10px] uppercase font-semibold mt-0.5">Messages</div>
+                                </div>
+                                <div class="bg-gray-800/60 rounded-xl p-3 text-center">
+                                    <div class="text-purple-400 font-black text-xl">98%</div>
+                                    <div class="text-gray-500 text-[10px] uppercase font-semibold mt-0.5">Delivery</div>
+                                </div>
+                            </div>
+                            <!-- Session list -->
+                            <div class="bg-gray-800/40 rounded-xl p-1 space-y-1">
+                                <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-emerald-500/5">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50"></div>
+                                    <div class="flex-1">
+                                        <div class="text-white text-xs font-semibold">+880 1785-273102</div>
+                                        <div class="text-gray-500 text-[10px]">Connected • 124 msgs</div>
+                                    </div>
+                                    <span class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold">LIVE</span>
+                                </div>
+                                <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50"></div>
+                                    <div class="flex-1">
+                                        <div class="text-white text-xs font-semibold">+880 1627-399126</div>
+                                        <div class="text-gray-500 text-[10px]">Connected • 89 msgs</div>
+                                    </div>
+                                    <span class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold">LIVE</span>
+                                </div>
+                                <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-yellow-400"></div>
+                                    <div class="flex-1">
+                                        <div class="text-white text-xs font-semibold">+880 1900-000000</div>
+                                        <div class="text-gray-500 text-[10px]">Idle • 0 msgs</div>
+                                    </div>
+                                    <span class="text-[10px] bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-full font-bold">IDLE</span>
+                                </div>
+                            </div>
+                            <!-- Progress bars -->
+                            <div class="space-y-2 pt-1">
+                                <div class="flex justify-between text-[10px] text-gray-400 mb-1"><span>Campaign: Eid Promo</span><span>73%</span></div>
+                                <div class="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-gradient-to-r from-emerald-500 to-green-400 rounded-full" style="width:73%"></div>
+                                </div>
+                                <div class="flex justify-between text-[10px] text-gray-400 mb-1"><span>API Rate Limit</span><span>31%</span></div>
+                                <div class="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-400 rounded-full" style="width:31%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ MARQUEE STATS TICKER ═══ -->
+    <div class="border-y border-white/5 bg-white/[0.02] py-4 overflow-hidden">
+        <div class="flex" style="width: max-content;">
+            <div class="ticker flex items-center gap-12 pr-12 text-sm text-gray-400 font-medium whitespace-nowrap">
+                <span><i class="fas fa-users text-emerald-500 mr-2"></i> Multi-Session Support</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-bolt text-yellow-500 mr-2"></i> Real-Time Webhooks</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-robot text-purple-400 mr-2"></i> AI Chatbot Builder</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-bullhorn text-blue-400 mr-2"></i> Bulk Campaigns</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-shield-alt text-emerald-400 mr-2"></i> SSL Secured</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-wallet text-pink-400 mr-2"></i> bKash Payment Gateway</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-code text-orange-400 mr-2"></i> REST API Access</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-chart-line text-emerald-400 mr-2"></i> Live Analytics</span>
+                <span class="text-white/10">•</span>
+            </div>
+            <!-- Duplicate for seamless loop -->
+            <div class="ticker flex items-center gap-12 pr-12 text-sm text-gray-400 font-medium whitespace-nowrap" aria-hidden="true">
+                <span><i class="fas fa-users text-emerald-500 mr-2"></i> Multi-Session Support</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-bolt text-yellow-500 mr-2"></i> Real-Time Webhooks</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-robot text-purple-400 mr-2"></i> AI Chatbot Builder</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-bullhorn text-blue-400 mr-2"></i> Bulk Campaigns</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-shield-alt text-emerald-400 mr-2"></i> SSL Secured</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-wallet text-pink-400 mr-2"></i> bKash Payment Gateway</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-code text-orange-400 mr-2"></i> REST API Access</span>
+                <span class="text-white/10">•</span>
+                <span><i class="fas fa-chart-line text-emerald-400 mr-2"></i> Live Analytics</span>
+                <span class="text-white/10">•</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ FEATURES ═══ -->
+    <section id="features" class="py-24 px-5 relative">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16 fade-up">
+                <div class="inline-flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-emerald-400 border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 rounded-full mb-4">
+                    <i class="fas fa-star"></i> Why WaFastApi
+                </div>
+                <h2 class="text-3xl md:text-5xl font-black mb-4">Everything you need to <span class="text-gradient">scale messaging</span></h2>
+                <p class="text-gray-400 max-w-2xl mx-auto text-lg">Built for developers and businesses who need reliable, high-throughput WhatsApp infrastructure.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="feat-card p-8 rounded-3xl fade-up">
+                    <div class="feat-icon bg-emerald-500/10"><i class="fas fa-layer-group text-emerald-400"></i></div>
+                    <h3 class="text-xl font-bold text-white mb-3">Multi-Session Management</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">Run multiple WhatsApp numbers simultaneously under one account. Manage, connect, and monitor all sessions from a single dashboard.</p>
+                </div>
+
+                <div class="feat-card p-8 rounded-3xl fade-up">
+                    <div class="feat-icon bg-blue-500/10"><i class="fas fa-bolt text-blue-400"></i></div>
+                    <h3 class="text-xl font-bold text-white mb-3">Real-Time Webhooks</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">Instant delivery notifications, read receipts, and incoming message callbacks sent straight to your endpoint in milliseconds.</p>
+                </div>
+
+                <div class="feat-card p-8 rounded-3xl fade-up">
+                    <div class="feat-icon bg-purple-500/10"><i class="fas fa-robot text-purple-400"></i></div>
+                    <h3 class="text-xl font-bold text-white mb-3">AI Chatbot Builder</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">Build powerful auto-reply rule engines with keyword matching, and integrate OpenAI GPT for intelligent conversational responses.</p>
+                </div>
+
+                <div class="feat-card p-8 rounded-3xl fade-up">
+                    <div class="feat-icon bg-orange-500/10"><i class="fas fa-bullhorn text-orange-400"></i></div>
+                    <h3 class="text-xl font-bold text-white mb-3">Bulk Campaign Sender</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">Upload CSV contact lists and send personalized messages, images, and documents at scale. Track delivery and status in real-time.</p>
+                </div>
+
+                <div class="feat-card p-8 rounded-3xl fade-up">
+                    <div class="feat-icon bg-pink-500/10"><i class="fas fa-wallet text-pink-400"></i></div>
+                    <h3 class="text-xl font-bold text-white mb-3">bKash Payment Gateway</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">Integrated automated bKash payment gateway. Recharge wallet and purchase subscriptions with instant balance credit.</p>
+                </div>
+
+                <div class="feat-card p-8 rounded-3xl fade-up">
+                    <div class="feat-icon bg-yellow-500/10"><i class="fas fa-chart-bar text-yellow-400"></i></div>
+                    <h3 class="text-xl font-bold text-white mb-3">Analytics Dashboard</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">Full visibility into messages sent, received, session uptime, API usage, and campaign performance — all in one place.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ API DEMO SECTION ═══ -->
+    <section class="py-20 px-5 bg-gray-950/50 border-y border-white/5">
+        <div class="max-w-6xl mx-auto">
+            <div class="grid lg:grid-cols-2 gap-16 items-center">
+                <div class="fade-up">
+                    <div class="inline-flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-blue-400 border border-blue-500/20 bg-blue-500/5 px-4 py-2 rounded-full mb-6">
+                        <i class="fas fa-code"></i> Simple REST API
+                    </div>
+                    <h2 class="text-3xl md:text-4xl font-black mb-5">Integrate in <span class="text-gradient">minutes</span></h2>
+                    <p class="text-gray-400 mb-8 text-lg leading-relaxed">One API endpoint to send messages, media, documents, and more. Generate your API key from the dashboard and start in minutes.</p>
+                    <a href="/doc" class="btn-ghost inline-flex items-center gap-2 px-6 py-3 text-sm"><i class="fas fa-book text-emerald-400"></i> View Full API Docs</a>
+                </div>
+
+                <!-- Code snippet -->
+                <div class="fade-up">
+                    <div class="mockup-window text-sm">
+                        <div class="mockup-bar">
+                            <div class="mockup-dot bg-rose-500"></div>
+                            <div class="mockup-dot bg-yellow-500"></div>
+                            <div class="mockup-dot bg-emerald-500"></div>
+                            <span class="text-xs text-gray-500 ml-2 font-mono">send-message.js</span>
+                        </div>
+                        <div class="p-5 font-mono text-xs leading-6 bg-[#050e1e] overflow-x-auto">
+<pre class="text-gray-300"><span class="text-pink-400">const</span> <span class="text-blue-400">response</span> <span class="text-white">=</span> <span class="text-yellow-400">await</span> <span class="text-blue-300">fetch</span><span class="text-white">(</span>
+  <span class="text-green-400">"https://wafastapi.com/api/session/<br>  {sessionId}/send-message"</span><span class="text-white">,</span>
+  <span class="text-white">{</span>
+    <span class="text-blue-300">method</span><span class="text-white">:</span> <span class="text-green-400">"POST"</span><span class="text-white">,</span>
+    <span class="text-blue-300">headers</span><span class="text-white">: {</span>
+      <span class="text-green-400">"Content-Type"</span><span class="text-white">:</span> <span class="text-green-400">"application/json"</span><span class="text-white">,</span>
+      <span class="text-green-400">"x-api-key"</span><span class="text-white">:</span> <span class="text-yellow-300">"YOUR_API_KEY"</span>
+    <span class="text-white">},</span>
+    <span class="text-blue-300">body</span><span class="text-white">:</span> <span class="text-blue-300">JSON.stringify</span><span class="text-white">({</span>
+      <span class="text-green-400">"number"</span><span class="text-white">:</span> <span class="text-yellow-300">"8801XXXXXXXXX"</span><span class="text-white">,</span>
+      <span class="text-green-400">"message"</span><span class="text-white">:</span> <span class="text-yellow-300">"Hello from WaFastApi! 🚀"</span>
+    <span class="text-white">})</span>
+  <span class="text-white">}</span>
+<span class="text-white">);</span>
+
+<span class="text-gray-500">// ✅ Response</span>
+<span class="text-white">{</span> <span class="text-green-400">"success"</span><span class="text-white">:</span> <span class="text-blue-400">true</span><span class="text-white">,</span> <span class="text-green-400">"messageId"</span><span class="text-white">:</span> <span class="text-yellow-300">"3EB0..."</span> <span class="text-white">}</span></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ PRICING ═══ -->
+    <section id="pricing" class="py-24 px-5">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16 fade-up">
+                <div class="inline-flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-emerald-400 border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 rounded-full mb-4">
+                    <i class="fas fa-tag"></i> Pricing Plans
+                </div>
+                <h2 class="text-3xl md:text-5xl font-black mb-4">Simple, <span class="text-gradient">transparent pricing</span></h2>
+                <p class="text-gray-400 max-w-xl mx-auto text-lg">Pick the plan that fits your business. Upgrade or downgrade anytime.</p>
+            </div>
+
+            <!-- Loading spinner -->
+            <div id="pricingLoader" class="flex flex-col items-center py-16">
+                <i class="fas fa-circle-notch fa-spin text-3xl text-emerald-500 mb-4"></i>
+                <p class="text-gray-400 text-sm">Loading latest pricing...</p>
+            </div>
+
+            <!-- Plans grid -->
+            <div id="plansContainer" class="hidden grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 grid"></div>
+
+            <!-- Error state -->
+            <div id="pricingError" class="hidden text-center py-12">
+                <div class="bg-rose-900/10 border border-rose-500/20 rounded-2xl p-8 max-w-sm mx-auto">
+                    <i class="fas fa-exclamation-triangle text-2xl text-rose-500 mb-3"></i>
+                    <p class="text-rose-400 text-sm mb-4">Could not load pricing.</p>
+                    <button onclick="loadPlans()" class="text-xs px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full hover:bg-rose-500/20 transition-colors">Retry</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ CTA SECTION ═══ -->
+    <section class="py-24 px-5 relative overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-900/10 to-transparent pointer-events-none"></div>
+        <div class="max-w-4xl mx-auto text-center relative fade-up">
+            <div class="w-16 h-16 bg-gradient-to-br from-emerald-400 to-green-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-emerald-500/30">
+                <i class="fab fa-whatsapp text-white text-3xl"></i>
+            </div>
+            <h2 class="text-4xl md:text-6xl font-black mb-6">Ready to get <span class="text-gradient">started?</span></h2>
+            <p class="text-gray-400 text-xl mb-10 max-w-2xl mx-auto">Join hundreds of businesses already using WaFastApi to power their WhatsApp communications.</p>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <a href="/register" class="btn-primary text-lg px-10 py-4 inline-flex items-center justify-center gap-2">
+                    <i class="fas fa-user-plus"></i> Create Free Account
+                </a>
+                <a href="/login" class="btn-ghost text-lg px-10 py-4 inline-flex items-center justify-center gap-2">
+                    <i class="fas fa-sign-in-alt text-emerald-400"></i> Sign In
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ FOOTER ═══ -->
+    <footer class="border-t border-white/5 bg-gray-950 py-12 px-5">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-6">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 bg-gradient-to-br from-emerald-400 to-green-600 rounded-lg flex items-center justify-center">
+                        <i class="fab fa-whatsapp text-white"></i>
+                    </div>
+                    <span class="font-black text-white">Wa<span class="text-gradient">Fast</span>Api</span>
+                </div>
+                <div class="flex items-center gap-6 text-sm text-gray-500">
+                    <a href="/doc" class="hover:text-emerald-400 transition-colors">API Docs</a>
+                    <a href="/login" class="hover:text-emerald-400 transition-colors">Dashboard</a>
+                    <a href="#pricing" class="hover:text-emerald-400 transition-colors">Pricing</a>
+                </div>
+                <p class="text-xs text-gray-600">© 2026 WaFastApi. Not affiliated with WhatsApp LLC.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // ── Scroll animations ──────────────────────────────────
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((e, i) => {
+                if (e.isIntersecting) {
+                    setTimeout(() => e.target.classList.add('visible'), i * 80);
+                }
+            });
+        }, { threshold: 0.1 });
+        document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+        // ── Load Pricing Plans ─────────────────────────────────
+        const currSymbols = { BDT: "৳", USD: "$", EUR: "€" };
+
+        function planCard(plan, currency, billing) {
+            const sym = currSymbols[currency] || currency;
+            const isPop = plan.highlighted;
+            const features = (plan.features || []).slice(0, 5);
+            return `
+                <div class="plan-card ${isPop ? 'popular' : ''} relative">
+                    ${isPop ? `<div class="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-emerald-500 to-green-500 text-white text-xs font-black px-4 py-1.5 rounded-full">⭐ MOST POPULAR</div>` : ''}
+                    <h3 class="text-lg font-black text-white mb-1">${plan.name}</h3>
+                    <p class="text-sm text-gray-400 mb-5 min-h-[36px]">${plan.description || ''}</p>
+                    <div class="mb-6">
+                        <span class="text-4xl font-black text-white">${sym}${plan.price?.toLocaleString()}</span>
+                        <span class="text-gray-500 text-sm ml-1">/${plan.durationDays || 30} days</span>
+                    </div>
+                    <ul class="space-y-2.5 mb-8 flex-1">
+                        ${features.map(f => `<li class="flex items-start gap-2.5 text-sm text-gray-300"><i class="fas fa-check-circle text-emerald-500 mt-0.5 flex-shrink-0"></i><span>${f}</span></li>`).join('')}
+                        ${plan.sessionLimit ? `<li class="flex items-start gap-2.5 text-sm text-gray-300"><i class="fas fa-check-circle text-emerald-500 mt-0.5 flex-shrink-0"></i><span>Up to ${plan.sessionLimit} Sessions</span></li>` : ''}
+                    </ul>
+                    <a href="/register" class="${isPop ? 'btn-primary' : 'btn-ghost'} block text-center py-3 rounded-xl text-sm font-bold">
+                        ${isPop ? '🚀 Get Started' : 'Start Plan'}
+                    </a>
+                </div>
+            `;
+        }
+
+        async function loadPlans() {
+            const loader = document.getElementById('pricingLoader');
+            const grid = document.getElementById('plansContainer');
+            const err = document.getElementById('pricingError');
+            loader.classList.remove('hidden'); grid.classList.add('hidden'); err.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/subscription/list', { signal: AbortSignal.timeout(8000) });
+                if (!res.ok) throw new Error('fetch failed');
+                const data = await res.json();
+                const { plans = [], currency = 'BDT', billing = 'monthly' } = data.subscriptions || data;
+
+                if (!plans.length) throw new Error('no plans');
+
+                grid.innerHTML = plans.map(p => planCard(p, currency, billing)).join('');
+                loader.classList.add('hidden');
+                grid.classList.remove('hidden');
+            } catch(e) {
+                loader.classList.add('hidden');
+                err.classList.remove('hidden');
+            }
+        }
+
+        async function checkAuthStatus() {
+            try {
+                const res = await fetch('/api/auth/profile');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.user) {
+                        // User is logged in, hide guest nav and show dashboard nav
+                        const guestNav = document.querySelector('.glass-nav');
+                        if (guestNav) guestNav.style.display = 'none';
+
+                        const script = document.createElement('script');
+                        script.src = '/js/nav.js';
+                        script.onload = () => injectNav(''); // Empty key
+                        document.body.appendChild(script);
+                    }
+                }
+            } catch(e) { /* ignore */ }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAuthStatus();
+            loadPlans();
+        });
+    </script>
+</body>
+</html>

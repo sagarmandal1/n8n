@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Auto Responder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f3f4f6; overflow-x: hidden; }
+        .glass-panel { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .toast { position: fixed; bottom: 20px; right: 20px; background: #1f2937; color: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); z-index: 1000; transition: transform 0.3s; transform: translateY(150%); border: 1px solid rgba(255,255,255,0.1); }
+        .toast.show { transform: translateY(0); }
+    </style>
+</head>
+<body class="antialiased selection:bg-emerald-500/30">
+
+    <!-- Navigation injected by /js/nav.js -->
+    <script src="/js/nav.js"></script>
+
+    <!-- Main Content -->
+    <div class="pb-12 max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
+        <script>injectNav('chatbot');</script>
+        
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-white mb-2 tracking-tight">AI Auto Responder</h1>
+                <p class="text-gray-400 text-sm">Create smart reply rules for your WhatsApp sessions instantly.</p>
+            </div>
+            <div>
+                <button onclick="document.getElementById('addModal').classList.remove('hidden')" class="bg-gradient-to-r from-emerald-500 to-green-600 text-white px-5 py-2.5 rounded-full text-sm font-bold hover:from-emerald-400 hover:to-green-500 transition-all shadow-lg shadow-emerald-500/25 border border-emerald-400 flex items-center gap-2">
+                    <i class="fas fa-plus"></i> New Rule
+                </button>
+            </div>
+        </div>
+
+        <!-- Fallback Settings Card -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl mb-8 relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl"></div>
+            <div class="flex flex-col md:flex-row gap-6 relative z-10">
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-white mb-1"><i class="fas fa-shield-alt text-rose-500 mr-2"></i> Unknown Message Fallback</h3>
+                    <p class="text-gray-400 text-xs mb-4">When a user sends a message that doesn't match any rules, the bot will reply with this default message. Turn it off to ignore unknown messages entirely.</p>
+                    
+                    <div class="flex items-center gap-3 mb-4">
+                        <select id="fallbackSession" onchange="loadFallbackForSelectedSession()" class="bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-rose-500 outline-none text-sm min-w-[200px]"></select>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" id="fallbackToggle" class="sr-only peer" onchange="toggleFallbackInputs()">
+                          <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+                          <span class="ml-3 text-sm font-medium text-gray-300" id="fallbackToggleLabel">Disabled</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="flex-1 space-y-3">
+                    <textarea id="fallbackText" class="w-full h-20 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-rose-500 outline-none resize-none text-sm placeholder-gray-600 transition-all opacity-50" disabled placeholder="Type your default response here... (Enable the toggle first)"></textarea>
+                    <button id="saveFallbackBtn" onclick="saveFallbackSettings()" class="bg-gray-800 hover:bg-rose-600 hover:border-rose-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold border border-gray-700 transition-all w-full flex justify-center items-center gap-2">
+                        <i class="fas fa-save text-rose-400" id="fallbackBtnIcon"></i> <span id="fallbackBtnText">Save Fallback</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ChatGPT Settings Card -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl mb-8 relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl"></div>
+            <div class="flex flex-col md:flex-row gap-6 relative z-10">
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-white mb-1"><i class="fas fa-brain text-emerald-500 mr-2"></i> VIP ChatGPT AI Fallback</h3>
+                    <p class="text-gray-400 text-xs mb-4">When enabled, this Bot handles unrecognized messages intelligently via OpenAI instead of sending the static fallback message.</p>
+                    
+                    <div class="flex items-center gap-3 mb-4">
+                        <select id="aiSession" onchange="loadAiForSelectedSession()" class="bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none text-sm min-w-[200px]"></select>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" id="aiToggle" class="sr-only peer" onchange="toggleAiInputs()">
+                          <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                          <span class="ml-3 text-sm font-medium text-gray-300" id="aiToggleLabel">Disabled</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="flex-1 space-y-3">
+                    <input type="password" id="aiApiKey" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none text-sm placeholder-gray-600 transition-all opacity-50" disabled placeholder="OpenAI API Key (sk-...)">
+                    <textarea id="aiPrompt" class="w-full h-16 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none resize-none text-sm placeholder-gray-600 transition-all opacity-50" disabled placeholder="System Prompt: e.g. You are a helpful sales assistant..."></textarea>
+                    <button id="saveAiBtn" onclick="saveAiSettings()" class="bg-gray-800 hover:bg-emerald-600 hover:border-emerald-500 text-white px-5 py-2 rounded-xl text-sm font-bold border border-gray-700 transition-all w-full flex justify-center items-center gap-2">
+                        <i class="fas fa-save text-emerald-400" id="aiBtnIcon"></i> <span id="aiBtnText">Save AI Settings</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rules Grid -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-xl">
+           <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-gray-800/50 border-b border-gray-700">
+                        <th class="p-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Session</th>
+                        <th class="p-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Keyword Trigger</th>
+                        <th class="p-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Reply Payload</th>
+                        <th class="p-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
+                        <th class="p-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="rulesTable" class="divide-y divide-gray-800">
+                    <tr>
+                       <td colspan="5" class="p-8 text-center text-gray-500">
+                           <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Loading AI rules...
+                       </td>
+                    </tr>
+                </tbody>
+           </table>
+        </div>
+
+    </div>
+
+    <!-- Add Rule Modal -->
+    <div id="addModal" class="fixed inset-0 backdrop-blur-sm bg-black/60 hidden items-center justify-center z-[100] p-4">
+      <div class="bg-gray-900 rounded-2xl p-6 md:p-8 max-w-md w-full border border-gray-800 shadow-2xl relative">
+        <h3 class="text-xl font-bold text-white mb-4 border-b border-gray-800 pb-3"><i class="fas fa-robot text-emerald-500 mr-2"></i> Configure AI Rule</h3>
+        
+        <label class="block text-gray-400 text-xs mb-1 font-semibold uppercase">Target Session</label>
+        <select id="ruleSession" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all mb-4 text-sm"></select>
+        
+        <label class="block text-gray-400 text-xs mb-1 font-semibold uppercase">Trigger Keyword</label>
+        <div class="flex gap-2 mb-4">
+            <select id="ruleMatch" class="w-1/3 bg-gray-800 border border-gray-700 rounded-xl px-2 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none text-sm">
+               <option value="exact">Exact Match</option>
+               <option value="contains">Contains</option>
+               <option value="regex">Regex</option>
+            </select>
+            <input type="text" id="ruleKeyword" class="w-2/3 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none text-sm placeholder-gray-600" placeholder="e.g. price">
+        </div>
+
+        <label class="block text-gray-400 text-xs mb-1 font-semibold uppercase">Auto-Reply Message</label>
+        <textarea id="ruleReply" class="w-full h-24 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white mb-4 focus:ring-emerald-500 outline-none resize-none text-sm placeholder-gray-600" placeholder="Hello! Our price starts at $99."></textarea>
+        
+        <div class="flex gap-2 mb-6">
+            <div class="flex-1">
+                <label class="block text-gray-400 text-xs mb-1 font-semibold uppercase">Attach Media</label>
+                <input type="file" id="ruleMedia" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-2 py-2 text-white text-xs file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-500 file:text-white hover:file:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+            <div class="flex-1">
+                <label class="block text-gray-400 text-xs mb-1 font-semibold uppercase">Type</label>
+                <select id="ruleMediaType" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-2 py-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none text-sm">
+                   <option value="none">None</option>
+                   <option value="image">Image</option>
+                   <option value="video">Video</option>
+                   <option value="audio">Audio</option>
+                   <option value="document">Doc</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="flex gap-3">
+          <button onclick="document.getElementById('addModal').classList.add('hidden')" class="flex-1 py-3 px-4 bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white rounded-xl font-semibold transition-colors text-sm">Cancel</button>
+          <button onclick="saveRule()" class="flex-[2] py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold transition-colors text-sm shadow-lg shadow-emerald-500/20">Deploy Rule</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-[200] space-y-2"></div>
+
+<script>
+    function showToast(title, message) {
+        const t = document.getElementById('toastContainer');
+        const elm = document.createElement('div');
+        elm.className = 'bg-gray-800 border border-gray-700 text-white p-4 rounded-xl shadow-2xl mt-2 fade-in';
+        elm.innerHTML = `<h4 class="font-bold text-emerald-400 text-sm">${title}</h4><p class="text-xs text-gray-300 mt-1">${message}</p>`;
+        t.appendChild(elm);
+        setTimeout(() => elm.remove(), 4000);
+    }
+
+    let globalSessions = [];
+
+    async function fetchSessions() {
+        try {
+            const res = await fetch("/api/session/list");
+            const data = await res.json();
+            globalSessions = data.sessions || [];
+            
+            const sel = document.getElementById("ruleSession");
+            const fbSel = document.getElementById("fallbackSession");
+            const aiSel = document.getElementById("aiSession");
+            sel.innerHTML = "";
+            fbSel.innerHTML = "";
+            aiSel.innerHTML = "";
+            
+            if (globalSessions.length === 0) {
+                fbSel.innerHTML = `<option value="">No Active Sessions</option>`;
+                aiSel.innerHTML = `<option value="">No Active Sessions</option>`;
+                return;
+            }
+            
+            globalSessions.forEach(s => {
+                const opt = `<option value="${s._id}">${s._id} (${s.status})</option>`;
+                sel.innerHTML += opt;
+                fbSel.innerHTML += opt;
+                aiSel.innerHTML += opt;
+            });
+            
+            // Initial load for fallback UI
+            loadFallbackForSelectedSession();
+            loadAiForSelectedSession();
+        } catch (e) {
+            console.error("Error fetching sessions:", e);
+        }
+    }
+
+    function loadFallbackForSelectedSession() {
+        const sessionId = document.getElementById("fallbackSession").value;
+        if (!sessionId) return;
+        
+        const session = globalSessions.find(s => s._id === sessionId);
+        if (session) {
+            document.getElementById("fallbackToggle").checked = session.fallbackEnabled === true || session.fallbackEnabled === "true";
+            document.getElementById("fallbackText").value = session.fallbackMessage || "";
+            toggleFallbackInputs();
+        }
+    }
+
+    function toggleFallbackInputs() {
+        const isEnabled = document.getElementById("fallbackToggle").checked;
+        const textWrapper = document.getElementById("fallbackText");
+        const saveBtn = document.getElementById("saveFallbackBtn");
+        const label = document.getElementById("fallbackToggleLabel");
+        
+        if (isEnabled) {
+            textWrapper.removeAttribute("disabled");
+            textWrapper.classList.remove("opacity-50");
+            saveBtn.classList.add("bg-rose-600");
+            saveBtn.classList.remove("bg-gray-800");
+            label.textContent = "Enabled";
+            label.classList.add("text-rose-400");
+            label.classList.remove("text-gray-300");
+        } else {
+            textWrapper.setAttribute("disabled", "true");
+            textWrapper.classList.add("opacity-50");
+            saveBtn.classList.remove("bg-rose-600");
+            saveBtn.classList.add("bg-gray-800");
+            label.textContent = "Disabled";
+            label.classList.remove("text-rose-400");
+            label.classList.add("text-gray-300");
+        }
+    }
+
+    async function saveFallbackSettings() {
+        const sessionId = document.getElementById("fallbackSession").value;
+        const enabled = document.getElementById("fallbackToggle").checked;
+        const message = document.getElementById("fallbackText").value;
+        
+        if (!sessionId) return showToast("Error", "Please select a session first.");
+        if (enabled && !message.trim()) return showToast("Error", "Fallback message cannot be empty when enabled.");
+
+        const btnIcon = document.getElementById("fallbackBtnIcon");
+        btnIcon.className = "fas fa-spinner fa-spin text-white";
+
+        try {
+            const res = await fetch(`/api/session/${sessionId}/set-fallback`, {
+                method: "POST",
+                headers: {"Content-Type":"application/json"},
+                body: JSON.stringify({ fallbackEnabled: enabled, fallbackMessage: message })
+            });
+            
+            if (res.ok) {
+                showToast("Success", "Fallback Settings Saved!");
+                // Update local cache
+                const idx = globalSessions.findIndex(s => s._id === sessionId);
+                if (idx > -1) {
+                    globalSessions[idx].fallbackEnabled = enabled;
+                    globalSessions[idx].fallbackMessage = message;
+                }
+            } else {
+                showToast("Error", "Failed to update fallback.");
+            }
+        } catch(e) {
+            showToast("Error", "Failed to save settings.");
+        } finally {
+            btnIcon.className = "fas fa-save text-rose-200";
+        }
+    }
+
+    function loadAiForSelectedSession() {
+        const sessionId = document.getElementById("aiSession").value;
+        if (!sessionId) return;
+        
+        const session = globalSessions.find(s => s._id === sessionId);
+        if (session) {
+            document.getElementById("aiToggle").checked = session.aiEnabled === true || session.aiEnabled === "true";
+            document.getElementById("aiApiKey").value = session.openAiKey || "";
+            document.getElementById("aiPrompt").value = session.aiPrompt || "";
+            toggleAiInputs();
+        }
+    }
+
+    function toggleAiInputs() {
+        const isEnabled = document.getElementById("aiToggle").checked;
+        const keyWrapper = document.getElementById("aiApiKey");
+        const promptWrapper = document.getElementById("aiPrompt");
+        const saveBtn = document.getElementById("saveAiBtn");
+        const label = document.getElementById("aiToggleLabel");
+        
+        if (isEnabled) {
+            keyWrapper.removeAttribute("disabled");
+            keyWrapper.classList.remove("opacity-50");
+            promptWrapper.removeAttribute("disabled");
+            promptWrapper.classList.remove("opacity-50");
+            saveBtn.classList.add("bg-emerald-600");
+            saveBtn.classList.remove("bg-gray-800");
+            label.textContent = "Enabled";
+            label.classList.add("text-emerald-400");
+            label.classList.remove("text-gray-300");
+        } else {
+            keyWrapper.setAttribute("disabled", "true");
+            keyWrapper.classList.add("opacity-50");
+            promptWrapper.setAttribute("disabled", "true");
+            promptWrapper.classList.add("opacity-50");
+            saveBtn.classList.remove("bg-emerald-600");
+            saveBtn.classList.add("bg-gray-800");
+            label.textContent = "Disabled";
+            label.classList.remove("text-emerald-400");
+            label.classList.add("text-gray-300");
+        }
+    }
+
+    async function saveAiSettings() {
+        const sessionId = document.getElementById("aiSession").value;
+        const enabled = document.getElementById("aiToggle").checked;
+        const aiKey = document.getElementById("aiApiKey").value;
+        const aiPrompt = document.getElementById("aiPrompt").value;
+        
+        if (!sessionId) return showToast("Error", "Please select a session first.");
+        
+        const btnIcon = document.getElementById("aiBtnIcon");
+        btnIcon.className = "fas fa-spinner fa-spin text-white";
+
+        try {
+            const res = await fetch(`/api/session/${sessionId}/set-ai`, {
+                method: "POST",
+                headers: {"Content-Type":"application/json"},
+                body: JSON.stringify({ aiEnabled: enabled, openAiKey: aiKey, aiPrompt: aiPrompt })
+            });
+            
+            if (res.ok) {
+                showToast("Success", "AI Settings Saved!");
+                const idx = globalSessions.findIndex(s => s._id === sessionId);
+                if (idx > -1) {
+                    globalSessions[idx].aiEnabled = enabled;
+                    globalSessions[idx].openAiKey = aiKey;
+                    globalSessions[idx].aiPrompt = aiPrompt;
+                }
+            } else {
+                showToast("Error", "Failed to update AI settings.");
+            }
+        } catch(e) {
+            showToast("Error", "Failed to save AI settings.");
+        } finally {
+            btnIcon.className = "fas fa-save text-emerald-200";
+        }
+    }
+
+    async function loadRules() {
+        try {
+            const res = await fetch("/api/autoreply");
+            const data = await res.json();
+            const tb = document.getElementById("rulesTable");
+            tb.innerHTML = "";
+            if (data.length === 0) {
+               tb.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500">No AI rules deployed yet. Click 'New Rule' to start.</td></tr>`;
+            }
+
+            data.forEach(r => {
+                tb.innerHTML += `
+                  <tr class="hover:bg-gray-800/30 transition border-b border-gray-800 last:border-0">
+                     <td class="p-4 text-sm text-gray-300font-mono">${(r.session && r.session._id) ? r.session._id.substring(0,8)+'...' : 'Unknown'}</td>
+                     <td class="p-4 text-sm"><span class="bg-gray-800 text-emerald-400 px-2 py-1 rounded text-xs select-all border border-gray-700">${r.matchType}: ${r.keyword}</span></td>
+                     <td class="p-4 text-sm text-gray-400 max-w-[200px] truncate" title="${r.replyText}">${r.replyText}</td>
+                     <td class="p-4 text-sm">
+                         <button onclick="toggleRule('${r._id}')" class="px-2 py-1 text-xs rounded font-bold ${r.isActive ? 'bg-emerald-500/20 text-emerald-500' : 'bg-rose-500/20 text-rose-500'} transition">
+                            ${r.isActive ? 'ACTIVE' : 'PAUSED'}
+                         </button>
+                     </td>
+                     <td class="p-4 text-right">
+                         <button onclick="deleteRule('${r._id}')" class="text-rose-400 hover:text-white hover:bg-rose-500 px-3 py-1.5 rounded-lg transition text-xs border border-rose-500/30"><i class="fas fa-trash"></i> DELETE</button>
+                     </td>
+                  </tr>
+                `;
+            });
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    async function saveRule() {
+        const sess = document.getElementById("ruleSession").value;
+        const key = document.getElementById("ruleKeyword").value;
+        const match = document.getElementById("ruleMatch").value;
+        const rep = document.getElementById("ruleReply").value;
+        const mediaInput = document.getElementById("ruleMedia");
+        const mediaType = document.getElementById("ruleMediaType").value;
+
+        if(!key || !rep) return alert("Keyword and Reply required.");
+
+        try {
+            let mediaUrl = null;
+            if(mediaInput.files && mediaInput.files.length > 0) {
+                const formData = new FormData();
+                formData.append("media", mediaInput.files[0]);
+                const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+                const uploadData = await uploadRes.json();
+                if(!uploadData.success) throw new Error("File upload failed.");
+                mediaUrl = uploadData.url;
+            }
+
+            await fetch("/api/autoreply", {
+                method: "POST",
+                headers: {"Content-Type":"application/json"},
+                body: JSON.stringify({ sessionId: sess, keyword: key, matchType: match, replyText: rep, mediaUrl, mediaType })
+            });
+            document.getElementById('addModal').classList.add('hidden');
+            showToast("Success", "AI Rule Deployed!");
+            document.getElementById("ruleKeyword").value = "";
+            document.getElementById("ruleReply").value = "";
+            document.getElementById("ruleMedia").value = "";
+            document.getElementById("ruleMediaType").value = "none";
+            loadRules();
+        } catch(e) {
+            showToast("Error", "Failed to deploy rule.");
+        }
+    }
+
+    async function toggleRule(id) {
+       await fetch("/api/autoreply/"+id+"/toggle", {method: "PUT"});
+       loadRules();
+    }
+
+    async function deleteRule(id) {
+       if(!confirm("Delete this rule?")) return;
+       await fetch("/api/autoreply/"+id, {method: "DELETE"});
+       loadRules();
+    }
+
+    // Init
+    fetchSessions();
+    loadRules();
+</script>
+</body>
+</html>

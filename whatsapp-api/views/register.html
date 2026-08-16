@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Premium Register</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-200 min-h-screen flex items-center justify-center relative overflow-x-hidden md:py-12 py-6">
+    <!-- Background decorations -->
+    <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10">
+        <div class="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] rounded-full bg-emerald-900/40 blur-[120px]"></div>
+        <div class="absolute bottom-[10%] right-[10%] w-[30%] h-[30%] rounded-full bg-green-800/20 blur-[100px]"></div>
+    </div>
+
+    <div class="glass-panel w-full max-w-lg p-8 md:p-10 rounded-3xl shadow-2xl mx-4 relative z-10 transition-all hover:-translate-y-1">
+        <!-- Logo -->
+        <div class="flex flex-col items-center mb-6">
+            <div class="w-16 h-16 bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/30 mb-4 hover:scale-105 transition-transform cursor-pointer">
+                <i class="fab fa-whatsapp text-white text-4xl"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-white tracking-tight">Create Account</h1>
+            <p class="text-gray-400 mt-2 text-sm text-center">Join WaFastApi Manager today</p>
+        </div>
+
+        <div id="message" class="hidden mb-6 p-4 rounded-xl border flex items-center gap-3 text-sm font-medium transition-all">
+            <i class="fas fa-info-circle text-lg flex-shrink-0"></i>
+            <span id="message-text"></span>
+        </div>
+
+        <form id="register-form" class="space-y-4">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-1.5" for="name">Full Name</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <i class="fas fa-id-card text-gray-500"></i>
+                        </div>
+                        <input type="text" id="name" required class="block w-full pl-11 pr-4 py-3 bg-gray-900/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all" placeholder="John Doe">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-1.5" for="username">Username</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <i class="fas fa-user text-gray-500"></i>
+                        </div>
+                        <input type="text" id="username" required class="block w-full pl-11 pr-4 py-3 bg-gray-900/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all" placeholder="johndoe99">
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5" for="email">Email Address</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fas fa-envelope text-gray-500"></i>
+                    </div>
+                    <input type="email" id="email" required class="block w-full pl-11 pr-4 py-3 bg-gray-900/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all" placeholder="john@example.com">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5" for="password">Password</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fas fa-lock text-gray-500"></i>
+                    </div>
+                    <input type="password" id="password" required class="block w-full pl-11 pr-12 py-3 bg-gray-900/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all" placeholder="Strong password (min 8 chars)">
+                    <button type="button" class="toggle-password absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-white transition-colors">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <!-- Password hint -->
+                <p class="mt-2 text-xs text-gray-500">Must contain at least 8 characters, an uppercase and lowercase letter, a number, and a special character.</p>
+            </div>
+
+            <div class="pt-4">
+                <button type="submit" class="submit-btn w-full flex justify-center py-3.5 px-4 rounded-xl shadow-sm text-sm font-bold text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 focus:ring-offset-gray-900 shadow-lg shadow-green-500/30 transition-all hover:scale-[1.02] active:scale-[0.98]">
+                    <i class="fas fa-user-plus mt-0.5 mr-2"></i> Register Account
+                </button>
+            </div>
+        </form>
+
+        <p class="mt-8 text-center text-sm text-gray-400">
+            Already have an account? 
+            <a href="/login" class="font-medium text-green-400 hover:text-green-300 transition-colors">Sign in here</a>
+        </p>
+    </div>
+
+    <script>
+        const registerForm = document.getElementById("register-form");
+        const message = document.getElementById("message");
+        const messageText = document.getElementById("message-text");
+
+        document.querySelector(".toggle-password").addEventListener("click", function () {
+            const input = document.getElementById("password");
+            const icon = this.querySelector("i");
+            if (input.type === "password") {
+                input.type = "text";
+                icon.classList.replace("fa-eye", "fa-eye-slash");
+            } else {
+                input.type = "password";
+                icon.classList.replace("fa-eye-slash", "fa-eye");
+            }
+        });
+
+        function showMessage(text, type = "error") {
+            messageText.textContent = text;
+            message.classList.remove("hidden", "bg-red-500/10", "border-red-500/50", "text-red-400", "bg-green-500/10", "border-green-500/50", "text-green-400");
+            
+            if (type === "error") {
+                message.classList.add("bg-red-500/10", "border-red-500/50", "text-red-400");
+                message.querySelector("i").className = "fas fa-exclamation-circle text-lg flex-shrink-0";
+            } else {
+                message.classList.add("bg-green-500/10", "border-green-500/50", "text-green-400");
+                message.querySelector("i").className = "fas fa-check-circle text-lg flex-shrink-0";
+            }
+        }
+
+        function validatePassword(password) {
+            if (password.length < 8) return "Password must be at least 8 characters long";
+            if (!/[A-Z]/.test(password)) return "Password requires an uppercase letter";
+            if (!/[a-z]/.test(password)) return "Password requires a lowercase letter";
+            if (!/\d/.test(password)) return "Password requires a number";
+            if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) return "Password requires a special character";
+            return null;
+        }
+
+        registerForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+
+            const formData = {
+                name: document.getElementById("name").value,
+                username: document.getElementById("username").value,
+                email: document.getElementById("email").value,
+                password: document.getElementById("password").value,
+            };
+
+            const passwordError = validatePassword(formData.password);
+            if (passwordError) return showMessage(passwordError);
+
+            const btn = registerForm.querySelector(".submit-btn");
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mt-0.5 mr-2"></i> Creating Account...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch("/api/auth/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(formData),
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    showMessage("Registration successful! Redirecting...", "success");
+                    setTimeout(() => window.location.href = "/sessions", 1000);
+                } else {
+                    showMessage(data.error || "Registration failed.");
+                }
+            } catch (err) {
+                showMessage("Server error during registration.");
+            } finally {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

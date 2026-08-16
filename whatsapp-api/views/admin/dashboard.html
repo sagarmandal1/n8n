@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Super Admin Control Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background-color: #020817; color: #e2e8f0; display: flex; min-height: 100vh; overflow-x: hidden; }
+
+        /* ── Sidebar ── */
+        #sidebar {
+            width: 240px; min-height: 100vh; background: #0d1117;
+            border-right: 1px solid rgba(239,68,68,0.12);
+            display: flex; flex-direction: column; flex-shrink: 0;
+            position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+            transition: width 0.2s;
+        }
+        .sidebar-logo { padding: 20px 16px 14px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .nav-item {
+            display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+            color: #94a3b8; font-size: 13.5px; font-weight: 500; cursor: pointer;
+            border-radius: 10px; margin: 2px 8px; transition: all 0.15s; text-decoration: none;
+        }
+        .nav-item:hover { background: rgba(239,68,68,0.08); color: #f87171; }
+        .nav-item.active { background: rgba(239,68,68,0.12); color: #f87171; border-left: 3px solid #ef4444; }
+        .nav-item i { width: 18px; text-align: center; font-size: 14px; flex-shrink: 0; }
+        .nav-section { padding: 12px 16px 4px; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: 1px; }
+        .nav-divider { border-top: 1px solid rgba(255,255,255,0.04); margin: 8px 0; }
+
+        /* ── Main Content ── */
+        #main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+        #topbar { height: 60px; background: #0d1117; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-between; padding: 0 24px; position: sticky; top: 0; z-index: 50; gap: 16px; }
+        .page-content { padding: 24px; flex: 1; }
+
+        /* ── Cards & UI ── */
+        .glass { background: rgba(13,17,23,0.8); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; }
+        .kpi-card { background: linear-gradient(135deg, #0d1117, #111827); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 20px; position: relative; overflow: hidden; }
+        .tab-btn { padding: 8px 18px; font-size: 13px; font-weight: 600; color: #6b7280; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; white-space: nowrap; }
+        .tab-btn.active { color: #f87171; border-color: #ef4444; }
+
+        /* ── Toast ── */
+        .toast { position: fixed; bottom: 24px; right: 24px; background: #1e2432; color: white; padding: 14px 18px; border-radius: 12px; z-index: 9999; transition: transform 0.3s; transform: translateY(180%); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.6); min-width: 250px; }
+        .toast.show { transform: translateY(0); }
+
+        /* ── Modal ── */
+        .modal-bg { display: none; }
+        .modal-bg.show { display: flex; }
+        input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+
+        /* ── Table ── */
+        .data-table th { background: #111827; padding: 12px 16px; font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        .data-table td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+        .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<!-- ════════════ SIDEBAR ════════════ -->
+<aside id="sidebar">
+    <div class="sidebar-logo">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 bg-gradient-to-br from-rose-600 to-red-700 rounded-xl flex items-center justify-center shadow-lg shadow-rose-500/20">
+                <i class="fas fa-crown text-white text-sm"></i>
+            </div>
+            <div>
+                <p class="text-white font-bold text-sm leading-none">Super Admin</p>
+                <p class="text-rose-500 text-[10px] font-semibold mt-0.5">CONTROL PANEL</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto py-3">
+        <div class="nav-section">Overview</div>
+        <a class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard', this)">
+            <i class="fas fa-tachometer-alt"></i> Dashboard
+        </a>
+        <a class="nav-item" id="nav-revenue" onclick="showPage('revenue', this)">
+            <i class="fas fa-chart-line"></i> Revenue & Finance
+        </a>
+
+        <div class="nav-divider"></div>
+        <div class="nav-section">User Control</div>
+        <a class="nav-item" id="nav-users" onclick="showPage('users', this)">
+            <i class="fas fa-users"></i> All Users
+        </a>
+        <a class="nav-item" id="nav-sessions" onclick="showPage('sessions', this)">
+            <i class="fab fa-whatsapp"></i> Sessions Monitor
+        </a>
+        <a class="nav-item" id="nav-campaigns" onclick="showPage('campaigns', this)">
+            <i class="fas fa-bullhorn"></i> Campaigns
+        </a>
+        <a class="nav-item" id="nav-inbox" onclick="showPage('inbox', this)">
+            <i class="fas fa-inbox"></i> Global Inbox
+        </a>
+        <a class="nav-item" id="nav-autoreplies" onclick="showPage('autoreplies', this)">
+            <i class="fas fa-robot"></i> Chatbot Rules
+        </a>
+        <a class="nav-item" id="nav-usage" onclick="showPage('usage', this)">
+            <i class="fas fa-chart-bar"></i> API Usage
+        </a>
+
+        <div class="nav-divider"></div>
+        <div class="nav-section">Server Config</div>
+        <a class="nav-item" id="nav-gateways" onclick="showPage('gateways', this)">
+            <i class="fas fa-credit-card"></i> Payment Gateways
+        </a>
+        <a class="nav-item" id="nav-subscriptions" onclick="showPage('subscriptions', this)">
+            <i class="fas fa-gem"></i> Subscription Plans
+        </a>
+        <a class="nav-item" id="nav-coupons" onclick="showPage('coupons', this)">
+            <i class="fas fa-ticket-alt"></i> Coupons
+        </a>
+        <a class="nav-item" id="nav-announcements" onclick="showPage('announcements', this)">
+            <i class="fas fa-bullhorn"></i> Announcements
+        </a>
+        <a class="nav-item" id="nav-platform" onclick="showPage('platform', this)">
+            <i class="fas fa-cog"></i> Platform Settings
+        </a>
+        <a class="nav-item" id="nav-audit" onclick="showPage('audit', this)">
+            <i class="fas fa-history"></i> Audit Log
+        </a>
+        <a class="nav-item" id="nav-system" onclick="showPage('system', this)">
+            <i class="fas fa-server"></i> System Info
+        </a>
+    </div>
+
+    <div class="nav-divider"></div>
+    <div class="p-3">
+        <a class="nav-item" style="color:#f87171" onclick="window.location.href='/api/auth/logout'">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+    </div>
+</aside>
+
+<!-- ════════════ MAIN ════════════ -->
+<div id="main">
+
+    <!-- Topbar -->
+    <div id="topbar">
+        <div class="flex items-center gap-3 flex-1">
+            <span class="text-white font-bold text-base" id="topbarTitle">Dashboard</span>
+            <span class="text-xs bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded-full font-bold">ADMIN</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-500 hidden md:block" id="topbarTime"></span>
+            <div class="flex items-center gap-2 bg-gray-800/60 border border-gray-700 px-3 py-1.5 rounded-full">
+                <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                <span class="text-xs text-gray-300 font-medium">Live</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="page-content">
+
+        <!-- ══ PAGE: DASHBOARD ══ -->
+        <div id="page-dashboard">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="kpi-card">
+                    <div class="absolute top-0 right-0 w-20 h-20 bg-rose-500/5 rounded-full blur-2xl"></div>
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-2">Total Users</p>
+                    <p class="text-3xl font-black text-white" id="kTotalUsers">–</p>
+                    <p class="text-xs text-gray-600 mt-1" id="kNewUsers">–</p>
+                </div>
+                <div class="kpi-card">
+                    <div class="absolute top-0 right-0 w-20 h-20 bg-emerald-500/5 rounded-full blur-2xl"></div>
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-2">Active Sessions</p>
+                    <p class="text-3xl font-black text-emerald-400" id="kActiveSessions">–</p>
+                    <p class="text-xs text-gray-600 mt-1">WhatsApp Connected</p>
+                </div>
+                <div class="kpi-card">
+                    <div class="absolute top-0 right-0 w-20 h-20 bg-indigo-500/5 rounded-full blur-2xl"></div>
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-2">Subscribers</p>
+                    <p class="text-3xl font-black text-indigo-400" id="kActiveSubs">–</p>
+                    <p class="text-xs text-gray-600 mt-1">Active Plans</p>
+                </div>
+                <div class="kpi-card">
+                    <div class="absolute top-0 right-0 w-20 h-20 bg-amber-500/5 rounded-full blur-2xl"></div>
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-2">Revenue (Subs)</p>
+                    <p class="text-3xl font-black text-amber-400" id="kRevenue">–</p>
+                    <p class="text-xs text-gray-600 mt-1">From subscriptions</p>
+                </div>
+            </div>
+
+            <!-- Recent Users -->
+            <div class="glass overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-800/80 flex justify-between items-center">
+                    <h3 class="font-bold text-white text-sm"><i class="fas fa-user-clock text-rose-400 mr-2"></i>Recent Signups</h3>
+                    <span class="text-xs text-gray-500">Last 5 registrations</span>
+                </div>
+                <table class="data-table w-full">
+                    <thead><tr><th>Name / Email</th><th>Balance</th><th>Role</th><th>Status</th><th>Joined</th></tr></thead>
+                    <tbody id="recentUsersTable">
+                        <tr><td colspan="5" class="text-center text-gray-500 py-8"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: REVENUE ══ -->
+        <div id="page-revenue" class="hidden">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="kpi-card">
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-2">Total Recharged</p>
+                    <p class="text-3xl font-black text-white" id="rTotalRev">–</p>
+                    <p class="text-xs text-amber-400 mt-1" id="rRechargeCount">–</p>
+                </div>
+                <div class="kpi-card">
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-2">Sub Revenue</p>
+                    <p class="text-3xl font-black text-emerald-400" id="rSubRev">–</p>
+                </div>
+                <div class="kpi-card">
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-2">Msgs Sent</p>
+                    <p class="text-3xl font-black text-indigo-400" id="rMsgs">–</p>
+                </div>
+                <div class="kpi-card">
+                    <p class="text-xs text-gray-500 font-semibold uppercase mb-2">Msgs Received</p>
+                    <p class="text-3xl font-black text-violet-400" id="rReceived">–</p>
+                </div>
+            </div>
+            <!-- Revenue Chart -->
+            <div class="glass p-5 mb-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-bold text-white text-sm"><i class="fas fa-chart-area text-emerald-400 mr-2"></i>Revenue Trend</h3>
+                    <div class="flex gap-2">
+                        <button onclick="loadRevenueChart(7)" id="chart7" class="text-xs px-3 py-1.5 rounded-lg bg-rose-600 text-white font-bold border border-rose-500 transition">7 Days</button>
+                        <button onclick="loadRevenueChart(30)" id="chart30" class="text-xs px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 border border-gray-700 transition">30 Days</button>
+                    </div>
+                </div>
+                <canvas id="revenueChart" height="90"></canvas>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <div class="lg:col-span-2 glass overflow-hidden">
+                    <div class="px-5 py-4 border-b border-gray-800/80"><h3 class="font-bold text-white text-sm"><i class="fas fa-receipt text-amber-400 mr-2"></i>Recent Transactions</h3></div>
+                    <table class="data-table w-full">
+                        <thead><tr><th>User</th><th>Type</th><th>Amount</th><th>Desc.</th><th>Date</th></tr></thead>
+                        <tbody id="revenueTransTable">
+                            <tr><td colspan="5" class="text-center text-gray-500 py-8"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="glass overflow-hidden">
+                    <div class="px-5 py-4 border-b border-gray-800/80"><h3 class="font-bold text-white text-sm"><i class="fas fa-trophy text-amber-400 mr-2"></i>Top Balances</h3></div>
+                    <div id="topUsersList"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: USERS ══ -->
+        <div id="page-users" class="hidden">
+            <div class="flex gap-3 mb-5">
+                <input id="userSearch" type="text" placeholder="Search name or email..." oninput="filterUsers()" class="flex-1 bg-gray-800/80 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-rose-500 placeholder-gray-600">
+                <select id="userRoleFilter" onchange="filterUsers()" class="bg-gray-800/80 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none">
+                    <option value="">All Roles</option>
+                    <option value="admin">Admin</option>
+                    <option value="user">User</option>
+                </select>
+                <select id="userStatusFilter" onchange="filterUsers()" class="bg-gray-800/80 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="banned">Banned</option>
+                </select>
+                <button onclick="exportUsers()" class="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold border border-rose-500 transition"><i class="fas fa-download mr-1"></i>Export CSV</button>
+            </div>
+            <div class="glass overflow-hidden">
+                <table class="data-table w-full">
+                    <thead><tr><th>Name / Email</th><th>Balance</th><th>Role</th><th>Subscription</th><th>Status</th><th>Joined</th><th class="text-right">Actions</th></tr></thead>
+                    <tbody id="allUsersTable">
+                        <tr><td colspan="7" class="text-center text-gray-500 py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Loading users...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-xs text-gray-600 mt-3" id="usersCount"></p>
+        </div>
+
+        <!-- ══ PAGE: SESSIONS MONITOR ══ -->
+        <div id="page-sessions" class="hidden">
+            <div class="glass overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-800/80 flex justify-between items-center">
+                    <h3 class="font-bold text-white text-sm"><i class="fab fa-whatsapp text-emerald-400 mr-2"></i>All WhatsApp Sessions</h3>
+                    <button onclick="loadAdminSessions()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700 transition"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+                </div>
+                <table class="data-table w-full">
+                    <thead><tr><th>Session ID</th><th>User</th><th>Status</th><th>API Key</th><th>Webhook</th><th class="text-right">Actions</th></tr></thead>
+                    <tbody id="adminSessionsTable">
+                        <tr><td colspan="6" class="text-center text-gray-500 py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: CAMPAIGNS ══ -->
+        <div id="page-campaigns" class="hidden">
+            <div class="glass overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-800/80"><h3 class="font-bold text-white text-sm"><i class="fas fa-bullhorn text-indigo-400 mr-2"></i>All Campaigns (Platform-wide)</h3></div>
+                <table class="data-table w-full">
+                    <thead><tr><th>Campaign</th><th>User</th><th>Status</th><th>Progress</th><th>Created</th></tr></thead>
+                    <tbody id="adminCampaignsTable">
+                        <tr><td colspan="5" class="text-center text-gray-500 py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: GLOBAL INBOX ══ -->
+        <div id="page-inbox" class="hidden">
+            <div class="glass overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-800/80 flex justify-between items-center">
+                    <h3 class="font-bold text-white text-sm"><i class="fas fa-inbox text-violet-400 mr-2"></i>Global Inbox — All Received Messages</h3>
+                    <button onclick="loadAdminInbox()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700 transition"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+                </div>
+                <div id="adminInboxList" class="divide-y divide-gray-800/50 max-h-[520px] overflow-y-auto">
+                    <div class="py-10 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-2xl mb-3"></i><p>Loading...</p></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: PAYMENT GATEWAYS ══ -->
+        <div id="page-gateways" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="glass p-6">
+                    <h3 class="text-base font-bold text-white mb-4 flex items-center gap-2"><i class="fas fa-mobile-alt text-pink-500"></i> bKash Settings</h3>
+                    <div class="space-y-3">
+                        <div><label class="text-xs text-gray-500 uppercase mb-1 block">App Key</label><input type="text" id="bkashAppKey" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500"></div>
+                        <div><label class="text-xs text-gray-500 uppercase mb-1 block">App Secret</label><input type="text" id="bkashAppSecret" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500"></div>
+                        <div><label class="text-xs text-gray-500 uppercase mb-1 block">Username</label><input type="text" id="bkashUser" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                        <div><label class="text-xs text-gray-500 uppercase mb-1 block">Password</label><input type="password" id="bkashPass" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                        <label class="flex items-center gap-2 cursor-pointer mt-2"><input type="checkbox" id="bkashActive" class="w-4 h-4"><span class="text-sm text-gray-300">Enable bKash Gateway</span></label>
+                    </div>
+                </div>
+                <div class="glass p-6">
+                    <h3 class="text-base font-bold text-white mb-4 flex items-center gap-2"><i class="fab fa-stripe text-indigo-400"></i> Stripe Settings</h3>
+                    <div class="space-y-3">
+                        <div><label class="text-xs text-gray-500 uppercase mb-1 block">Public Key</label><input type="text" id="stripePub" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"></div>
+                        <div><label class="text-xs text-gray-500 uppercase mb-1 block">Secret Key</label><input type="text" id="stripeSec" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"></div>
+                        <label class="flex items-center gap-2 cursor-pointer mt-2"><input type="checkbox" id="stripeActive" class="w-4 h-4"><span class="text-sm text-gray-300">Enable Stripe Gateway</span></label>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-5 flex justify-end">
+                <button onclick="saveSettings()" id="saveSetBtn" class="bg-rose-600 hover:bg-rose-500 text-white px-7 py-2.5 rounded-xl text-sm font-bold border border-rose-500 transition flex items-center gap-2">
+                    <i class="fas fa-save"></i> Save Gateway Settings
+                </button>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: SUBSCRIPTIONS (Plan CRUD) ══ -->
+        <div id="page-subscriptions" class="hidden">
+            <!-- Create Plan -->
+            <div class="glass p-5 mb-5">
+                <h3 class="text-sm font-bold text-white mb-4"><i class="fas fa-plus text-rose-400 mr-2"></i>Create New Plan</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <input id="planId" type="text" placeholder="ID (e.g. pro_monthly)" class="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm outline-none col-span-2 md:col-span-1">
+                    <input id="planName" type="text" placeholder="Plan Name" class="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm outline-none">
+                    <input id="planPrice" type="number" placeholder="Price (৳)" class="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm outline-none">
+                    <input id="planDays" type="number" placeholder="Duration (days)" class="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm outline-none">
+                    <input id="planSessions" type="number" placeholder="Max Sessions" class="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm outline-none">
+                    <button onclick="createPlan()" class="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold border border-rose-500 transition"><i class="fas fa-plus mr-1"></i>Create</button>
+                </div>
+                <div class="mt-3">
+                    <input id="planFeatures" type="text" placeholder="Features (comma separated, e.g: 1 Session,Chatbot,API Access)" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm outline-none">
+                </div>
+            </div>
+            <!-- Plans List -->
+            <div class="glass overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-800/80 flex justify-between items-center">
+                    <h3 class="font-bold text-white text-sm"><i class="fas fa-gem text-violet-400 mr-2"></i>Subscription Plans</h3>
+                    <button onclick="loadAdminSubscriptions()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700 transition"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+                </div>
+                <table class="data-table w-full">
+                    <thead><tr><th>ID</th><th>Name</th><th>Price</th><th>Duration</th><th>Sessions</th><th>Status</th><th class="text-right">Actions</th></tr></thead>
+                    <tbody id="adminSubsTable"><tr><td colspan="7" class="text-center text-gray-500 py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: SYSTEM INFO ══ -->
+        <div id="page-system" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="glass p-6">
+                    <h3 class="text-base font-bold text-white mb-4"><i class="fas fa-server text-emerald-400 mr-2"></i>Server Info</h3>
+                    <div class="space-y-3 text-sm">
+                        <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">Node.js</span><span class="text-white font-mono" id="sysNode">–</span></div>
+                        <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">Platform</span><span class="text-white font-mono" id="sysPlatform">–</span></div>
+                        <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">Uptime</span><span class="text-emerald-400 font-mono" id="sysUptime">–</span></div>
+                        <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">Memory Used</span><span class="text-white font-mono" id="sysMemory">–</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Free Memory</span><span class="text-white font-mono" id="sysFreeMemory">–</span></div>
+                    </div>
+                </div>
+                <div class="glass p-6">
+                    <h3 class="text-base font-bold text-white mb-4"><i class="fas fa-database text-indigo-400 mr-2"></i>Database & App</h3>
+                    <div class="space-y-3 text-sm">
+                        <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">DB Status</span><span class="text-emerald-400 font-bold">● Connected</span></div>
+                        <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">Total Users</span><span class="text-white font-mono" id="sysUsers">–</span></div>
+                        <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">Total Sessions</span><span class="text-white font-mono" id="sysSessions">–</span></div>
+                        <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">Total Campaigns</span><span class="text-white font-mono" id="sysCampaigns">–</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Server Time</span><span class="text-white font-mono" id="sysTime">–</span></div>
+                    </div>
+                    <button onclick="loadSystem()" class="mt-4 w-full bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded-xl text-sm font-medium border border-gray-700 transition"><i class="fas fa-sync-alt mr-1"></i>Refresh Stats</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: CHATBOT RULES ══ -->
+        <div id="page-autoreplies" class="hidden">
+            <div class="glass overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-800/80 flex justify-between items-center">
+                    <h3 class="font-bold text-white text-sm"><i class="fas fa-robot text-violet-400 mr-2"></i>All Chatbot Rules (Platform-wide)</h3>
+                    <button onclick="loadAutoReplies()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700 transition"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+                </div>
+                <table class="data-table w-full">
+                    <thead><tr><th>Keyword</th><th>Reply</th><th>Match</th><th>User</th><th>Active</th></tr></thead>
+                    <tbody id="autoReplyTable"><tr><td colspan="5" class="text-center text-gray-500 py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: API USAGE ══ -->
+        <div id="page-usage" class="hidden">
+            <div class="glass overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-800/80 flex justify-between items-center">
+                    <h3 class="font-bold text-white text-sm"><i class="fas fa-chart-bar text-amber-400 mr-2"></i>API Usage Per User</h3>
+                    <button onclick="loadUsage()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700 transition"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+                </div>
+                <table class="data-table w-full">
+                    <thead><tr><th>User</th><th>Sessions</th><th>Msgs Sent</th><th>Msgs Recv</th><th>Campaigns</th><th>Total Activity</th></tr></thead>
+                    <tbody id="usageTable"><tr><td colspan="6" class="text-center text-gray-500 py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: COUPONS ══ -->
+        <div id="page-coupons" class="hidden">
+            <div class="flex gap-3 mb-5">
+                <input id="cpCode" type="text" placeholder="Code e.g. WELCOME50" class="bg-gray-800/80 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none flex-1 uppercase">
+                <input id="cpDiscount" type="number" placeholder="Discount %" min="1" max="100" class="bg-gray-800/80 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none w-28">
+                <input id="cpMaxUses" type="number" placeholder="Max uses (0=∞)" class="bg-gray-800/80 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none w-36">
+                <button onclick="createCoupon()" class="bg-rose-600 hover:bg-rose-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold border border-rose-500 transition"><i class="fas fa-plus mr-1"></i>Create</button>
+            </div>
+            <div class="glass overflow-hidden">
+                <table class="data-table w-full">
+                    <thead><tr><th>Code</th><th>Discount</th><th>Uses</th><th>Status</th><th>Created</th><th class="text-right">Actions</th></tr></thead>
+                    <tbody id="couponTable"><tr><td colspan="6" class="text-center text-gray-500 py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: ANNOUNCEMENTS ══ -->
+        <div id="page-announcements" class="hidden">
+            <div class="glass p-5 mb-5">
+                <h3 class="text-sm font-bold text-white mb-3"><i class="fas fa-plus text-emerald-400 mr-2"></i>New Announcement</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                    <input id="annTitle" type="text" placeholder="Title" class="bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none col-span-2">
+                    <select id="annType" class="bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none">
+                        <option value="info">ℹ Info</option><option value="success">✅ Success</option><option value="warning">⚠ Warning</option><option value="urgent">🔴 Urgent</option>
+                    </select>
+                </div>
+                <textarea id="annBody" rows="2" placeholder="Announcement body..." class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none mb-3"></textarea>
+                <button onclick="createAnnouncement()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition"><i class="fas fa-paper-plane mr-1"></i>Publish</button>
+            </div>
+            <div class="glass overflow-hidden">
+                <table class="data-table w-full">
+                    <thead><tr><th>Title</th><th>Type</th><th>Body</th><th>Created</th><th class="text-right">Actions</th></tr></thead>
+                    <tbody id="annTable"><tr><td colspan="5" class="text-center text-gray-500 py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: PLATFORM SETTINGS ══ -->
+        <div id="page-platform" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="glass p-6">
+                    <h3 class="text-base font-bold text-white mb-4"><i class="fas fa-globe text-indigo-400 mr-2"></i>Platform Branding</h3>
+                    <div class="space-y-3">
+                        <div><label class="text-xs text-gray-500 uppercase mb-1 block">Site Name</label><input type="text" id="pfSiteName" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                        <div><label class="text-xs text-gray-500 uppercase mb-1 block">Contact Email</label><input type="email" id="pfEmail" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                        <div><label class="text-xs text-gray-500 uppercase mb-1 block">Terms / Privacy URL</label><input type="url" id="pfTerms" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                        <div><label class="text-xs text-gray-500 uppercase mb-1 block">Welcome Message</label><input type="text" id="pfWelcome" class="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                    </div>
+                </div>
+                <div class="glass p-6">
+                    <h3 class="text-base font-bold text-white mb-4"><i class="fas fa-sliders-h text-emerald-400 mr-2"></i>Limits & Controls</h3>
+                    <div class="space-y-3">
+                        <div class="bg-gray-800/60 border border-indigo-500/20 rounded-xl p-4">
+                            <div class="flex items-center gap-2 mb-2">
+                                <i class="fas fa-info-circle text-indigo-400"></i>
+                                <span class="text-xs font-bold text-indigo-400 uppercase">Session Limits are Subscription-Based</span>
+                            </div>
+                            <p class="text-xs text-gray-400 mb-3">Session limits are controlled by subscription plans, not a global cap. Each plan defines how many WhatsApp sessions a user can have.</p>
+                            <div id="planLimitsSummary" class="space-y-1.5"></div>
+                            <a onclick="showPage('subscriptions', document.getElementById('nav-subscriptions'))" class="mt-3 inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 cursor-pointer font-medium">
+                                <i class="fas fa-gem mr-1"></i>Manage Subscription Plans →
+                            </a>
+                        </div>
+                        <label class="flex items-center gap-2 cursor-pointer mt-3"><input type="checkbox" id="pfMaintenance" class="w-4 h-4"><span class="text-sm text-gray-300">🔧 Maintenance Mode</span></label>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-5 flex justify-end">
+                <button onclick="savePlatform()" class="bg-rose-600 hover:bg-rose-500 text-white px-7 py-2.5 rounded-xl text-sm font-bold border border-rose-500 transition flex items-center gap-2"><i class="fas fa-save"></i> Save Platform Settings</button>
+            </div>
+        </div>
+
+        <!-- ══ PAGE: AUDIT LOG ══ -->
+        <div id="page-audit" class="hidden">
+            <div class="glass overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-800/80 flex justify-between items-center">
+                    <h3 class="font-bold text-white text-sm"><i class="fas fa-history text-amber-400 mr-2"></i>Admin Audit Trail</h3>
+                    <button onclick="loadAudit()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700 transition"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+                </div>
+                <table class="data-table w-full">
+                    <thead><tr><th>Admin</th><th>Action</th><th>Target</th><th>Details</th><th>Time</th></tr></thead>
+                    <tbody id="auditTable"><tr><td colspan="5" class="text-center text-gray-500 py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div><!-- end page-content -->
+</div><!-- end main -->
+
+<!-- ════ BALANCE MODAL ════ -->
+<div id="balanceModal" class="modal-bg fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] items-center justify-center">
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md p-6 relative mx-4">
+        <button onclick="document.getElementById('balanceModal').classList.remove('show')" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+        <h3 class="text-xl font-bold text-white mb-1"><i class="fas fa-wallet text-emerald-400 mr-2"></i>Adjust Balance</h3>
+        <p class="text-gray-400 text-xs mb-6" id="balanceUserText">–</p>
+        <input type="hidden" id="balUserId">
+        <div class="mb-4">
+            <label class="block text-xs text-gray-400 uppercase mb-2">Amount (৳)</label>
+            <input type="number" id="balAmount" placeholder="e.g. 500" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none">
+        </div>
+        <button onclick="submitBalance()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-bold transition">Confirm Balance Addition</button>
+    </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast"><strong id="toastTitle" class="text-sm block mb-0.5">Notification</strong><span id="toastMsg" class="text-xs text-gray-400"></span></div>
+
+<script>
+const BASE = '/api/admin';
+let _allUsers = [];
+
+/* ─── Toast ─── */
+function showToast(title, msg, err=false) {
+    document.getElementById('toastTitle').textContent = title;
+    document.getElementById('toastTitle').className = `text-sm block mb-0.5 ${err ? 'text-rose-400':'text-emerald-400'}`;
+    document.getElementById('toastMsg').textContent = msg;
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+/* ─── Clock ─── */
+setInterval(() => {
+    const now = new Date();
+    document.getElementById('topbarTime').textContent = now.toLocaleTimeString();
+}, 1000);
+
+/* ─── Pages ─── */
+function showPage(id, el) {
+    document.querySelectorAll('[id^="page-"]').forEach(p => p.classList.add('hidden'));
+    document.getElementById('page-' + id).classList.remove('hidden');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    if(el) el.classList.add('active');
+    const TITLES = { dashboard:'Dashboard', revenue:'Revenue & Finance', users:'All Users', sessions:'Sessions Monitor', campaigns:'Campaigns', inbox:'Global Inbox', gateways:'Payment Gateways', subscriptions:'Subscription Plans', system:'System Info', autoreplies:'Chatbot Rules', usage:'API Usage', coupons:'Coupons', announcements:'Announcements', platform:'Platform Settings', audit:'Audit Log' };
+    document.getElementById('topbarTitle').textContent = TITLES[id] || id;
+    const LOADERS = { dashboard:loadDashboard, revenue:loadRevenue, users:loadAllUsers, sessions:loadAdminSessions, campaigns:loadAdminCampaigns, inbox:loadAdminInbox, gateways:loadSettings, subscriptions:loadAdminSubscriptions, system:loadSystem, autoreplies:loadAutoReplies, usage:loadUsage, coupons:loadCoupons, announcements:loadAnnouncements, platform:loadPlatform, audit:loadAudit };
+    if(LOADERS[id]) LOADERS[id]();
+}
+
+/* ─── Dashboard ─── */
+async function loadDashboard() {
+    try {
+        const [statsRes, revRes] = await Promise.all([fetch(`${BASE}/stats`), fetch(`${BASE}/revenue`)]);
+        const stats = await statsRes.json();
+        const rev   = await revRes.json();
+        if(stats.success) {
+            document.getElementById('kTotalUsers').textContent = stats.stats.totalUsers;
+            document.getElementById('kActiveSessions').textContent = stats.stats.activeSessions;
+            document.getElementById('kNewUsers').textContent = `${rev.revenue?.newUsersWeek || 0} new this week`;
+        }
+        if(rev.success) {
+            document.getElementById('kActiveSubs').textContent = rev.revenue.activeSubscribers;
+            document.getElementById('kRevenue').textContent = `৳${rev.revenue.totalSubscriptionRevenue.toLocaleString()}`;
+        }
+        // Recent users
+        if(stats.success && stats.recentUsers) {
+            const tb = document.getElementById('recentUsersTable');
+            tb.innerHTML = stats.recentUsers.map(u => `
+                <tr>
+                    <td><p class="font-semibold text-white">${u.name}</p><p class="text-xs text-gray-500">${u.email}</p></td>
+                    <td class="text-emerald-400 font-bold">৳${u.balance}</td>
+                    <td><span class="text-xs px-2 py-0.5 rounded border ${u.role==='admin'?'border-rose-500/30 bg-rose-500/10 text-rose-400':'border-gray-700 bg-gray-800 text-gray-400'}">${u.role.toUpperCase()}</span></td>
+                    <td><span class="text-xs px-2 py-0.5 rounded-full font-bold ${u.status==='active'?'text-emerald-400 bg-emerald-400/10':'text-rose-400 bg-rose-400/10'}">${u.status}</span></td>
+                    <td class="text-gray-500 text-xs">${new Date(u.createdAt).toLocaleDateString()}</td>
+                </tr>
+            `).join('');
+        }
+    } catch(e) { console.error(e); }
+}
+
+/* ─── Revenue ─── */
+async function loadRevenue() {
+    try {
+        const res  = await fetch(`${BASE}/revenue`);
+        const data = await res.json();
+        if(!data.success) return;
+        const r = data.revenue;
+        document.getElementById('rTotalRev').textContent = `৳${r.totalRevenue.toLocaleString()}`;
+        document.getElementById('rRechargeCount').textContent = `${r.totalRecharges} transactions`;
+        document.getElementById('rSubRev').textContent = `৳${r.totalSubscriptionRevenue.toLocaleString()}`;
+        document.getElementById('rMsgs').textContent = r.totalMessages.toLocaleString();
+        document.getElementById('rReceived').textContent = r.totalReceived.toLocaleString();
+
+        document.getElementById('revenueTransTable').innerHTML = data.recentTransactions.map(tx => `
+            <tr>
+                <td><p class="font-medium text-white">${tx.user?.name||'–'}</p><p class="text-xs text-gray-500">${tx.user?.email||''}</p></td>
+                <td><span class="text-xs px-2 py-0.5 rounded-full font-bold ${tx.type==='credit'?'bg-emerald-500/10 text-emerald-400':'bg-rose-500/10 text-rose-400'}">${tx.type==='credit'?'↑ CREDIT':'↓ DEBIT'}</span></td>
+                <td class="font-bold ${tx.type==='credit'?'text-emerald-400':'text-rose-400'}">${tx.type==='credit'?'+':'-'}৳${tx.amount}</td>
+                <td class="text-gray-500 text-xs max-w-[140px] truncate">${tx.description||tx.by||'–'}</td>
+                <td class="text-gray-500 text-xs">${new Date(tx.createdAt).toLocaleDateString()}</td>
+            </tr>
+        `).join('');
+
+        document.getElementById('topUsersList').innerHTML = data.topUsers.map((u,i) => `
+            <div class="px-5 py-3 hover:bg-gray-800/30 flex items-center gap-3 border-b border-gray-800/50">
+                <span class="font-black text-sm ${i===0?'text-amber-400':i===1?'text-gray-300':'text-amber-700/60'}">${i+1}</span>
+                <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-white truncate">${u.name}</p><p class="text-xs text-gray-500 truncate">${u.email}</p></div>
+                <span class="text-emerald-400 font-bold text-sm">৳${u.balance}</span>
+            </div>
+        `).join('');
+    } catch(e) { console.error(e); }
+    loadRevenueChart(7);
+}
+
+/* ─── All Users ─── */
+async function loadAllUsers() {
+    try {
+        const res  = await fetch(`${BASE}/users`);
+        const data = await res.json();
+        if(!data.success) return;
+        _allUsers = data.users;
+        document.getElementById('usersCount').textContent = `${_allUsers.length} total users`;
+        renderUsers(_allUsers);
+    } catch(e) { console.error(e); }
+}
+function filterUsers() {
+    const q = document.getElementById('userSearch').value.toLowerCase();
+    const role = document.getElementById('userRoleFilter').value;
+    const status = document.getElementById('userStatusFilter').value;
+    const filtered = _allUsers.filter(u =>
+        (u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)) &&
+        (role==='' || u.role===role) && (status==='' || u.status===status)
+    );
+    renderUsers(filtered);
+    document.getElementById('usersCount').textContent = `${filtered.length} of ${_allUsers.length} users`;
+}
+function renderUsers(users) {
+    const tb = document.getElementById('allUsersTable');
+    if (!users.length) { tb.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500 py-10">No users found</td></tr>`; return; }
+    tb.innerHTML = users.map(u => `
+        <tr>
+            <td><p class="font-semibold text-white">${u.name}</p><p class="text-xs text-gray-500">${u.email}</p></td>
+            <td class="text-emerald-400 font-bold">৳${u.balance.toFixed(2)}</td>
+            <td><span class="text-xs px-2 py-0.5 rounded border ${u.role==='admin'?'border-rose-500/30 bg-rose-500/10 text-rose-400':'border-gray-700 bg-gray-800 text-gray-400'}">${u.role.toUpperCase()}</span></td>
+            <td class="text-xs text-gray-400">${u.subscription?.id ? `<span class="text-indigo-400">${u.subscription.id}</span>` : '<span class="text-gray-600">None</span>'}</td>
+            <td><span class="text-xs px-2 py-0.5 rounded-full font-bold ${u.status==='active'?'text-emerald-400 bg-emerald-400/10':'text-rose-400 bg-rose-400/10'}">${u.status}</span></td>
+            <td class="text-gray-500 text-xs">${new Date(u.createdAt).toLocaleDateString()}</td>
+            <td class="text-right space-x-2">
+                <button onclick="openBalanceModal('${u._id}','${u.name}')" class="bg-gray-800 hover:bg-emerald-600/20 text-gray-400 hover:text-emerald-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-700 transition" title="Add Balance"><i class="fas fa-plus"></i></button>
+                ${u.role==='admin' ? `<button disabled class="bg-gray-800/40 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-800 cursor-not-allowed"><i class="fas fa-shield-alt"></i></button>` : 
+                `<button onclick="toggleBan('${u._id}','${u.status}')" class="bg-gray-800 hover:bg-rose-600/20 text-gray-400 hover:text-rose-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-700 transition" title="${u.status==='active'?'Ban':'Unban'} User"><i class="fas fa-ban"></i></button>`}
+            </td>
+        </tr>
+    `).join('');
+}
+
+/* ─── Sessions Monitor (ALL users, platform-wide) ─── */
+async function loadAdminSessions() {
+    try {
+        const res  = await fetch(`${BASE}/sessions`);
+        const data = await res.json();
+        const tb   = document.getElementById('adminSessionsTable');
+        if (!data.success || !data.sessions.length) {
+            tb.innerHTML = `<tr><td colspan="6" class="text-center text-gray-500 py-10"><i class="fas fa-inbox mr-2"></i>No sessions found across the platform.</td></tr>`;
+            return;
+        }
+        tb.innerHTML = data.sessions.map(s => `
+            <tr>
+                <td class="font-mono text-xs text-gray-300">${String(s._id).slice(-10)}</td>
+                <td>
+                    <p class="font-semibold text-white text-sm">${s.user?.name || '–'}</p>
+                    <p class="text-xs text-gray-500">${s.user?.email || ''}</p>
+                </td>
+                <td>
+                    <span class="text-xs px-2 py-0.5 rounded-full font-bold ${
+                        s.status === 'CONNECTED' ? 'bg-emerald-500/10 text-emerald-400' :
+                        s.status === 'DISCONNECTED' ? 'bg-rose-500/10 text-rose-400' :
+                        'bg-amber-500/10 text-amber-400'
+                    }">${s.status}</span>
+                </td>
+                <td class="font-mono text-xs text-gray-500">${s.apiKey ? s.apiKey.slice(0,20)+'…' : '–'}</td>
+                <td class="text-xs text-gray-500 max-w-[180px] truncate">${s.webhookUrl || '–'}</td>
+                <td class="text-right space-x-1">
+                    ${s.status==='CONNECTED'?`<button onclick="disconnectSessionAdmin('${s._id}')" class="bg-gray-800 hover:bg-amber-600/20 text-gray-400 hover:text-amber-400 px-2 py-1 rounded-lg text-xs border border-gray-700 transition" title="Disconnect"><i class="fas fa-unlink"></i></button>`:''}
+                    <button onclick="deleteSessionAdmin('${s._id}')" class="bg-gray-800 hover:bg-rose-600/20 text-gray-400 hover:text-rose-400 px-2 py-1 rounded-lg text-xs border border-gray-700 transition" title="Delete"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    } catch(e) {
+        document.getElementById('adminSessionsTable').innerHTML = `<tr><td colspan="6" class="text-center text-rose-400 py-8">Failed to load sessions</td></tr>`;
+    }
+}
+
+/* ─── Campaigns Monitor (ALL users, platform-wide) ─── */
+async function loadAdminCampaigns() {
+    try {
+        const res  = await fetch(`${BASE}/campaigns`);
+        const data = await res.json();
+        const tb   = document.getElementById('adminCampaignsTable');
+        if (!data.success || !data.campaigns.length) {
+            tb.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500 py-10"><i class="fas fa-bullhorn mr-2"></i>No campaigns found. Total: ${data.total || 0}</td></tr>`;
+            return;
+        }
+        tb.innerHTML = data.campaigns.map(c => `
+            <tr>
+                <td>
+                    <p class="font-semibold text-white text-sm">${c.name || '–'}</p>
+                    <p class="text-xs text-gray-500">${c.totalContacts || 0} contacts</p>
+                </td>
+                <td>
+                    <p class="font-semibold text-white text-sm">${c.user?.name || '–'}</p>
+                    <p class="text-xs text-gray-500">${c.user?.email || ''}</p>
+                </td>
+                <td>
+                    <span class="text-xs px-2 py-0.5 rounded-full font-bold ${
+                        c.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' :
+                        c.status === 'running'   ? 'bg-amber-500/10 text-amber-400' :
+                        c.status === 'failed'    ? 'bg-rose-500/10 text-rose-400' :
+                        'bg-gray-500/10 text-gray-400'
+                    }">${c.status}</span>
+                </td>
+                <td class="text-sm">
+                    <span class="text-emerald-400">${c.sentCount || 0}</span> sent &nbsp;/&nbsp;
+                    <span class="text-rose-400">${c.failedCount || 0}</span> failed
+                </td>
+                <td class="text-xs text-gray-500">${new Date(c.createdAt).toLocaleDateString()}</td>
+            </tr>
+        `).join('');
+    } catch(e) {
+        document.getElementById('adminCampaignsTable').innerHTML = `<tr><td colspan="5" class="text-center text-rose-400 py-8">Failed to load campaigns</td></tr>`;
+    }
+}
+
+/* ─── Global Inbox ─── */
+async function loadAdminInbox() {
+    try {
+        const res  = await fetch(`${BASE}/inbox?limit=40`);
+        const data = await res.json();
+        const list = document.getElementById('adminInboxList');
+        if(!data.success || !data.messages.length) {
+            list.innerHTML = `<div class="py-12 text-center text-gray-500"><i class="fas fa-inbox text-2xl mb-3"></i><p>No received messages yet</p></div>`;
+            return;
+        }
+        const timeAgo = d => { const s=Math.floor((Date.now()-new Date(d))/1000); return s<60?`${s}s ago`:s<3600?`${Math.floor(s/60)}m ago`:s<86400?`${Math.floor(s/3600)}h ago`:new Date(d).toLocaleDateString(); };
+        list.innerHTML = data.messages.map(m => `
+            <div class="px-5 py-3 hover:bg-gray-800/30 flex items-start gap-3">
+                <div class="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center text-xs text-gray-400 flex-shrink-0 font-bold">
+                    ${(m.fromNumber||'?').slice(-2)}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-0.5">
+                        <span class="text-sm font-semibold text-white">+${m.fromNumber||'Unknown'}</span>
+                        <span class="text-[10px] text-gray-500">${m.user?.name||''}</span>
+                        <span class="text-[10px] text-gray-600 ml-auto">${timeAgo(m.createdAt)}</span>
+                    </div>
+                    <p class="text-xs text-gray-400 truncate">${m.body||'<span class="italic">Media</span>'}</p>
+                </div>
+            </div>
+        `).join('');
+    } catch(e) { console.error(e); }
+}
+
+/* ─── User Subscriptions (used on dashboard stats) ─── */
+async function loadUserSubscriptions() {
+    // Not shown on page, just for reference
+}
+
+/* ─── System Info ─── */
+async function loadSystem() {
+    try {
+        const res = await fetch(`${BASE}/system`);
+        const data = await res.json();
+        if(!data.success) return;
+        const s = data.system;
+        document.getElementById('sysNode').textContent = s.nodeVersion;
+        document.getElementById('sysPlatform').textContent = s.platform;
+        const h = Math.floor(s.uptime/3600), m = Math.floor((s.uptime%3600)/60), sec = s.uptime%60;
+        document.getElementById('sysUptime').textContent = `${h}h ${m}m ${sec}s`;
+        document.getElementById('sysMemory').textContent = `${s.memoryUsed} MB used`;
+        document.getElementById('sysFreeMemory').textContent = `${s.memoryTotal - s.memoryUsed} MB free`;
+        document.getElementById('sysUsers').textContent = s.totalUsers;
+        document.getElementById('sysSessions').textContent = s.totalSessions + ' total';
+        document.getElementById('sysCampaigns').textContent = s.totalCampaigns;
+        document.getElementById('sysTime').textContent = new Date(s.serverTime).toLocaleString();
+    } catch(e) { console.error(e); }
+}
+
+/* ─── Settings ─── */
+async function loadSettings() {
+    try {
+        const res  = await fetch(`${BASE}/settings`);
+        const data = await res.json();
+        if(data.success && data.settings.paymentGateway) {
+            const pg = data.settings.paymentGateway;
+            if(pg.bKash) { document.getElementById('bkashAppKey').value=pg.bKash.appKey||''; document.getElementById('bkashAppSecret').value=pg.bKash.appSecret||''; document.getElementById('bkashUser').value=pg.bKash.username||''; document.getElementById('bkashPass').value=pg.bKash.password||''; document.getElementById('bkashActive').checked=pg.bKash.isActive||false; }
+            if(pg.stripe) { document.getElementById('stripePub').value=pg.stripe.publicKey||''; document.getElementById('stripeSec').value=pg.stripe.secretKey||''; document.getElementById('stripeActive').checked=pg.stripe.isActive||false; }
+        }
+    } catch(e) {}
+}
+async function saveSettings() {
+    const btn = document.getElementById('saveSetBtn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Saving...';
+    try {
+        const res = await fetch(`${BASE}/settings`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+            paymentGateway: {
+                bKash: { appKey:document.getElementById('bkashAppKey').value, appSecret:document.getElementById('bkashAppSecret').value, username:document.getElementById('bkashUser').value, password:document.getElementById('bkashPass').value, isActive:document.getElementById('bkashActive').checked },
+                stripe: { publicKey:document.getElementById('stripePub').value, secretKey:document.getElementById('stripeSec').value, isActive:document.getElementById('stripeActive').checked }
+            }
+        })});
+        const data = await res.json();
+        data.success ? showToast('Saved','Gateway settings updated!') : showToast('Error',data.error,true);
+    } catch(e) { showToast('Error','Network error',true); }
+    finally { btn.innerHTML = '<i class="fas fa-save mr-2"></i>Save Gateway Settings'; }
+}
+
+/* ─── Revenue Chart ─── */
+let revenueChartInstance = null;
+async function loadRevenueChart(days = 7) {
+    try {
+        document.getElementById('chart7').className = days===7 ? 'text-xs px-3 py-1.5 rounded-lg bg-rose-600 text-white font-bold border border-rose-500 transition' : 'text-xs px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 border border-gray-700 transition';
+        document.getElementById('chart30').className = days===30 ? 'text-xs px-3 py-1.5 rounded-lg bg-rose-600 text-white font-bold border border-rose-500 transition' : 'text-xs px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 border border-gray-700 transition';
+        const res = await fetch(`${BASE}/revenue/chart?days=${days}`);
+        const data = await res.json();
+        if(!data.success) return;
+        const ctx = document.getElementById('revenueChart').getContext('2d');
+        if(revenueChartInstance) revenueChartInstance.destroy();
+        revenueChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.labels.map(d => { const p=d.split('-'); return `${p[2]}/${p[1]}`; }),
+                datasets: [
+                    { label: 'Credits (৳)', data: data.credits, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', tension: 0.4, fill: true, pointRadius: 3, pointBackgroundColor: '#10b981' },
+                    { label: 'Debits (৳)', data: data.debits, borderColor: '#f87171', backgroundColor: 'rgba(248,113,113,0.08)', tension: 0.4, fill: true, pointRadius: 3, pointBackgroundColor: '#f87171' }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                plugins: { legend: { labels: { color: '#9ca3af', font: { size: 12 } } } },
+                scales: {
+                    x: { ticks: { color: '#6b7280', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    y: { ticks: { color: '#6b7280', font: { size: 11 }, callback: v => '৳'+v }, grid: { color: 'rgba(255,255,255,0.04)' } }
+                }
+            }
+        });
+    } catch(e) { console.error(e); }
+}
+
+/* ─── Subscription Plans CRUD ─── */
+async function loadAdminSubscriptions() {
+    try {
+        const res = await fetch(`${BASE}/plans`);
+        const data = await res.json();
+        const tb = document.getElementById('adminSubsTable');
+        if(!data.success || !data.plans.length) { tb.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500 py-10">No plans yet. Create one above.</td></tr>`; return; }
+        tb.innerHTML = data.plans.map(p => `<tr>
+            <td class="font-mono text-xs text-gray-400">${p.id}</td>
+            <td class="font-bold text-white">${p.name}</td>
+            <td class="text-emerald-400 font-bold">৳${p.price}</td>
+            <td class="text-gray-400">${p.durationDays} days</td>
+            <td class="text-indigo-400">${p.sessionLimit||1}</td>
+            <td><span class="text-xs px-2 py-0.5 rounded-full font-bold ${p.isActive!==false?'bg-emerald-500/10 text-emerald-400':'bg-rose-500/10 text-rose-400'}">${p.isActive!==false?'Active':'Disabled'}</span></td>
+            <td class="text-right"><button onclick="deletePlan('${p.id}')" class="bg-gray-800 hover:bg-rose-600/20 text-gray-400 hover:text-rose-400 px-3 py-1.5 rounded-lg text-xs border border-gray-700 transition"><i class="fas fa-trash"></i></button></td>
+        </tr>`).join('');
+    } catch(e) { console.error(e); }
+}
+async function createPlan() {
+    const id = document.getElementById('planId').value.trim();
+    const name = document.getElementById('planName').value.trim();
+    const price = document.getElementById('planPrice').value;
+    const durationDays = document.getElementById('planDays').value;
+    const sessionLimit = document.getElementById('planSessions').value || 1;
+    const featuresRaw = document.getElementById('planFeatures').value;
+    const features = featuresRaw ? featuresRaw.split(',').map(f => f.trim()).filter(Boolean) : [];
+    if(!id||!name||!price||!durationDays) return showToast('Error','All fields required',true);
+    try {
+        const res = await fetch(`${BASE}/plans`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id,name,price,durationDays,sessionLimit,features}) });
+        const data = await res.json();
+        if(data.success) {
+            showToast('Created','Plan created!');
+            ['planId','planName','planPrice','planDays','planSessions','planFeatures'].forEach(f => document.getElementById(f).value = '');
+            loadAdminSubscriptions();
+        } else showToast('Error', data.error, true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+async function deletePlan(planId) {
+    if(!confirm(`Delete plan "${planId}"?`)) return;
+    try {
+        const res = await fetch(`${BASE}/plans/${planId}`, { method:'DELETE' });
+        const data = await res.json();
+        data.success ? (showToast('Deleted','Plan removed'), loadAdminSubscriptions()) : showToast('Error',data.error,true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+
+/* ─── Balance Modal ─── */
+function openBalanceModal(uid, name) {
+    document.getElementById('balUserId').value = uid;
+    document.getElementById('balanceUserText').textContent = `Adding funds to: ${name}`;
+    document.getElementById('balAmount').value = '';
+    document.getElementById('balanceModal').classList.add('show');
+}
+async function submitBalance() {
+    const uid = document.getElementById('balUserId').value;
+    const amt = document.getElementById('balAmount').value;
+    if(!amt||isNaN(amt)) return showToast('Error','Enter a valid amount',true);
+    try {
+        const res  = await fetch(`${BASE}/users/${uid}/balance`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({amount:amt}) });
+        const data = await res.json();
+        if(data.success) { showToast('Done', data.message); document.getElementById('balanceModal').classList.remove('show'); loadAllUsers(); }
+        else showToast('Error', data.error||'Failed', true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+
+/* ─── Ban Toggle ─── */
+async function toggleBan(uid, currentStatus) {
+    const newStatus = currentStatus==='active'?'banned':'active';
+    try {
+        const res  = await fetch(`${BASE}/users/${uid}/status`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:newStatus}) });
+        const data = await res.json();
+        data.success ? (showToast('Updated',`User is now ${newStatus}`), loadAllUsers()) : showToast('Error',data.error,true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+
+/* Close modals on backdrop click */
+document.getElementById('balanceModal').addEventListener('click', function(e) {
+    if(e.target===this) this.classList.remove('show');
+});
+
+/* ─── Chatbot Rules ─── */
+async function loadAutoReplies() {
+    try {
+        const res = await fetch(`${BASE}/autoreplies`);
+        const data = await res.json();
+        const tb = document.getElementById('autoReplyTable');
+        if(!data.success || !data.rules.length) { tb.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500 py-10">No chatbot rules found.</td></tr>`; return; }
+        tb.innerHTML = data.rules.map(r => `<tr>
+            <td class="font-bold text-white">${r.keyword}</td>
+            <td class="text-gray-400 text-xs max-w-[200px] truncate">${r.replyText}</td>
+            <td><span class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400">${r.matchType}</span></td>
+            <td><p class="text-sm text-white">${r.user?.name||'–'}</p><p class="text-xs text-gray-500">${r.user?.email||''}</p></td>
+            <td><span class="text-xs px-2 py-0.5 rounded-full font-bold ${r.isActive?'bg-emerald-500/10 text-emerald-400':'bg-rose-500/10 text-rose-400'}">${r.isActive?'Active':'Off'}</span></td>
+        </tr>`).join('');
+    } catch(e) { console.error(e); }
+}
+
+/* ─── API Usage ─── */
+async function loadUsage() {
+    try {
+        const res = await fetch(`${BASE}/usage`);
+        const data = await res.json();
+        const tb = document.getElementById('usageTable');
+        if(!data.success || !data.usage.length) { tb.innerHTML = `<tr><td colspan="6" class="text-center text-gray-500 py-10">No usage data.</td></tr>`; return; }
+        tb.innerHTML = data.usage.map(u => `<tr>
+            <td><p class="font-semibold text-white">${u.name}</p><p class="text-xs text-gray-500">${u.email}</p></td>
+            <td class="text-indigo-400 font-bold">${u.sessions}</td>
+            <td class="text-emerald-400 font-bold">${u.sent}</td>
+            <td class="text-violet-400 font-bold">${u.received}</td>
+            <td class="text-amber-400 font-bold">${u.campaigns}</td>
+            <td class="text-white font-bold">${u.sent+u.received+u.campaigns}</td>
+        </tr>`).join('');
+    } catch(e) { console.error(e); }
+}
+
+/* ─── Coupons ─── */
+async function loadCoupons() {
+    try {
+        const res = await fetch(`${BASE}/coupons`);
+        const data = await res.json();
+        const tb = document.getElementById('couponTable');
+        if(!data.success || !data.coupons.length) { tb.innerHTML = `<tr><td colspan="6" class="text-center text-gray-500 py-10">No coupons yet.</td></tr>`; return; }
+        tb.innerHTML = data.coupons.map(c => `<tr>
+            <td class="font-bold text-white font-mono">${c.code}</td>
+            <td class="text-emerald-400 font-bold">${c.discountPercent}%</td>
+            <td class="text-gray-400">${c.usedCount}${c.maxUses?' / '+c.maxUses:' / ∞'}</td>
+            <td><span class="text-xs px-2 py-0.5 rounded-full font-bold ${c.isActive?'bg-emerald-500/10 text-emerald-400':'bg-rose-500/10 text-rose-400'}">${c.isActive?'Active':'Disabled'}</span></td>
+            <td class="text-gray-500 text-xs">${new Date(c.createdAt).toLocaleDateString()}</td>
+            <td class="text-right space-x-2">
+                <button onclick="toggleCouponStatus('${c._id}')" class="bg-gray-800 hover:bg-gray-700 text-gray-400 px-3 py-1.5 rounded-lg text-xs border border-gray-700 transition">${c.isActive?'Disable':'Enable'}</button>
+                <button onclick="deleteCoupon('${c._id}')" class="bg-gray-800 hover:bg-rose-600/20 text-gray-400 hover:text-rose-400 px-3 py-1.5 rounded-lg text-xs border border-gray-700 transition"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`).join('');
+    } catch(e) { console.error(e); }
+}
+async function createCoupon() {
+    const code = document.getElementById('cpCode').value;
+    const discountPercent = document.getElementById('cpDiscount').value;
+    const maxUses = document.getElementById('cpMaxUses').value || 0;
+    if(!code||!discountPercent) return showToast('Error','Code and discount required',true);
+    try {
+        const res = await fetch(`${BASE}/coupons`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code,discountPercent,maxUses}) });
+        const data = await res.json();
+        if(data.success) { showToast('Created','Coupon created!'); document.getElementById('cpCode').value=''; document.getElementById('cpDiscount').value=''; document.getElementById('cpMaxUses').value=''; loadCoupons(); }
+        else showToast('Error',data.error,true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+async function deleteCoupon(id) {
+    if(!confirm('Delete this coupon?')) return;
+    try {
+        const res = await fetch(`${BASE}/coupons/${id}`, { method:'DELETE' });
+        const data = await res.json();
+        data.success ? (showToast('Deleted','Coupon removed'), loadCoupons()) : showToast('Error',data.error,true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+async function toggleCouponStatus(id) {
+    try {
+        const res = await fetch(`${BASE}/coupons/${id}/toggle`, { method:'PATCH' });
+        const data = await res.json();
+        data.success ? loadCoupons() : showToast('Error',data.error,true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+
+/* ─── Announcements ─── */
+async function loadAnnouncements() {
+    try {
+        const res = await fetch(`${BASE}/announcements`);
+        const data = await res.json();
+        const tb = document.getElementById('annTable');
+        if(!data.success || !data.announcements.length) { tb.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500 py-10">No announcements.</td></tr>`; return; }
+        const typeColors = { info:'text-indigo-400', success:'text-emerald-400', warning:'text-amber-400', urgent:'text-rose-400' };
+        tb.innerHTML = data.announcements.map(a => `<tr>
+            <td class="font-bold text-white">${a.title}</td>
+            <td><span class="text-xs font-bold ${typeColors[a.type]||'text-gray-400'}">${a.type.toUpperCase()}</span></td>
+            <td class="text-gray-400 text-xs max-w-[250px] truncate">${a.body}</td>
+            <td class="text-gray-500 text-xs">${new Date(a.createdAt).toLocaleDateString()}</td>
+            <td class="text-right"><button onclick="deleteAnnouncement('${a._id}')" class="bg-gray-800 hover:bg-rose-600/20 text-gray-400 hover:text-rose-400 px-3 py-1.5 rounded-lg text-xs border border-gray-700 transition"><i class="fas fa-trash"></i></button></td>
+        </tr>`).join('');
+    } catch(e) { console.error(e); }
+}
+async function createAnnouncement() {
+    const title = document.getElementById('annTitle').value;
+    const body = document.getElementById('annBody').value;
+    const type = document.getElementById('annType').value;
+    if(!title||!body) return showToast('Error','Title and body required',true);
+    try {
+        const res = await fetch(`${BASE}/announcements`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title,body,type}) });
+        const data = await res.json();
+        if(data.success) { showToast('Published','Announcement sent!'); document.getElementById('annTitle').value=''; document.getElementById('annBody').value=''; loadAnnouncements(); }
+        else showToast('Error',data.error,true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+async function deleteAnnouncement(id) {
+    if(!confirm('Delete this announcement?')) return;
+    try {
+        const res = await fetch(`${BASE}/announcements/${id}`, { method:'DELETE' });
+        const data = await res.json();
+        data.success ? (showToast('Deleted','Announcement removed'), loadAnnouncements()) : showToast('Error',data.error,true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+
+/* ─── Platform Settings ─── */
+async function loadPlatform() {
+    try {
+        const res = await fetch(`${BASE}/settings`);
+        const data = await res.json();
+        if(data.success && data.settings.platform) {
+            const p = data.settings.platform;
+            document.getElementById('pfSiteName').value = p.siteName || '';
+            document.getElementById('pfEmail').value = p.contactEmail || '';
+            document.getElementById('pfTerms').value = p.termsUrl || '';
+            document.getElementById('pfWelcome').value = p.welcomeMessage || '';
+            document.getElementById('pfMaintenance').checked = p.maintenanceMode || false;
+        }
+        // Load plan limits summary
+        if(data.success && data.settings.subscriptionPlans) {
+            const plans = data.settings.subscriptionPlans.filter(p => p.isActive !== false);
+            const el = document.getElementById('planLimitsSummary');
+            if(el) {
+                el.innerHTML = plans.length
+                    ? plans.map(p => `
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-gray-300 font-medium">${p.name}</span>
+                            <span class="text-indigo-400 font-bold">${p.sessionLimit || 1} session${(p.sessionLimit||1)>1?'s':''}</span>
+                        </div>
+                    `).join('')
+                    : '<p class="text-xs text-gray-500">No plans configured yet.</p>';
+            }
+        }
+    } catch(e) {}
+}
+async function savePlatform() {
+    try {
+        const res = await fetch(`${BASE}/settings`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+            platform: {
+                siteName: document.getElementById('pfSiteName').value,
+                contactEmail: document.getElementById('pfEmail').value,
+                termsUrl: document.getElementById('pfTerms').value,
+                welcomeMessage: document.getElementById('pfWelcome').value,
+                maintenanceMode: document.getElementById('pfMaintenance').checked
+            }
+        })});
+        const data = await res.json();
+        data.success ? showToast('Saved','Platform settings updated!') : showToast('Error',data.error,true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+
+/* ─── Audit Log ─── */
+async function loadAudit() {
+    try {
+        const res = await fetch(`${BASE}/audit`);
+        const data = await res.json();
+        const tb = document.getElementById('auditTable');
+        if(!data.success || !data.logs.length) { tb.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500 py-10">No audit logs yet.</td></tr>`; return; }
+        const timeAgo = d => { const s=Math.floor((Date.now()-new Date(d))/1000); return s<60?`${s}s ago`:s<3600?`${Math.floor(s/60)}m ago`:s<86400?`${Math.floor(s/3600)}h ago`:new Date(d).toLocaleDateString(); };
+        tb.innerHTML = data.logs.map(l => `<tr>
+            <td class="text-white text-sm">${l.admin?.name||'–'}</td>
+            <td><span class="text-xs px-2 py-0.5 rounded bg-gray-800 text-amber-400 font-mono">${l.action}</span></td>
+            <td class="text-gray-300 text-sm">${l.target||'–'}</td>
+            <td class="text-gray-500 text-xs max-w-[150px] truncate">${l.details||'–'}</td>
+            <td class="text-gray-500 text-xs">${timeAgo(l.createdAt)}</td>
+        </tr>`).join('');
+    } catch(e) { console.error(e); }
+}
+
+/* ─── User Export CSV ─── */
+async function exportUsers() {
+    window.open(`${BASE}/users/export`, '_blank');
+}
+
+/* ─── Session Delete/Disconnect ─── */
+async function deleteSessionAdmin(id) {
+    if(!confirm('Delete this session permanently?')) return;
+    try {
+        const res = await fetch(`${BASE}/sessions/${id}`, { method:'DELETE' });
+        const data = await res.json();
+        data.success ? (showToast('Deleted','Session removed'), loadAdminSessions()) : showToast('Error',data.error,true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+async function disconnectSessionAdmin(id) {
+    if(!confirm('Disconnect this session?')) return;
+    try {
+        const res = await fetch(`${BASE}/sessions/${id}/disconnect`, { method:'POST' });
+        const data = await res.json();
+        data.success ? (showToast('Done','Session disconnected'), loadAdminSessions()) : showToast('Error',data.error,true);
+    } catch(e) { showToast('Error','Network error',true); }
+}
+
+/* ── INIT ── */
+loadDashboard();
+</script>
+</body>
+</html>

@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaFastApi | Sign Copy Automation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f3f4f6; }
+        .glass { background: rgba(17, 24, 39, 0.72); border: 1px solid rgba(255,255,255,0.06); backdrop-filter: blur(16px); }
+        .card { background: linear-gradient(135deg, rgba(17,24,39,0.95), rgba(15,23,42,0.92)); border: 1px solid rgba(255,255,255,0.06); }
+        .input { width: 100%; background: #111827; border: 1px solid #374151; color: #fff; border-radius: 12px; padding: 12px 14px; outline: none; }
+        .input:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.14); }
+        .btn { border-radius: 12px; padding: 10px 14px; font-weight: 700; font-size: 14px; transition: .15s; }
+        .btn-primary { background: #10b981; color: #03120d; }
+        .btn-primary:hover { background: #34d399; }
+        .btn-dark { background: #111827; color: #e5e7eb; border: 1px solid #374151; }
+        .btn-dark:hover { background: #1f2937; }
+        .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; }
+        .badge-green { background: rgba(16,185,129,0.12); color: #34d399; border: 1px solid rgba(16,185,129,0.18); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: #fbbf24; border: 1px solid rgba(245,158,11,0.18); }
+        .badge-red { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.18); }
+        .badge-gray { background: rgba(107,114,128,0.12); color: #d1d5db; border: 1px solid rgba(107,114,128,0.18); }
+        table th { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; }
+        table td { font-size: 13px; color: #e5e7eb; }
+    </style>
+</head>
+<body class="antialiased">
+    <script src="/js/nav.js"></script>
+    <script>injectNav('signcopy');</script>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+            <div>
+                <h1 class="text-3xl font-black tracking-tight text-white flex items-center gap-3">
+                    <span class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <i class="fas fa-file-pdf"></i>
+                    </span>
+                    Sign Copy Automation
+                </h1>
+                <p class="text-gray-400 mt-2 text-sm">Customer order, agent PDF parsing, rate capture, delivery, due/balance এবং ledger সব এক জায়গায়।</p>
+            </div>
+            <div class="glass rounded-2xl p-4 min-w-[320px]">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Active Session</label>
+                <div class="flex gap-3">
+                    <select id="sessionSelect" class="input"></select>
+                    <button class="btn btn-dark" onclick="reloadAll()"><i class="fas fa-rotate-right"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+            <div class="card rounded-2xl p-5">
+                <p class="text-xs text-gray-500 uppercase font-bold">Customers</p>
+                <p id="kCustomers" class="text-3xl font-black text-white mt-2">0</p>
+            </div>
+            <div class="card rounded-2xl p-5">
+                <p class="text-xs text-gray-500 uppercase font-bold">Agents</p>
+                <p id="kAgents" class="text-3xl font-black text-white mt-2">0</p>
+            </div>
+            <div class="card rounded-2xl p-5">
+                <p class="text-xs text-gray-500 uppercase font-bold">New Requests</p>
+                <p id="kRequests" class="text-3xl font-black text-fuchsia-400 mt-2">0</p>
+            </div>
+            <div class="card rounded-2xl p-5">
+                <p class="text-xs text-gray-500 uppercase font-bold">Pending</p>
+                <p id="kPending" class="text-3xl font-black text-amber-400 mt-2">0</p>
+            </div>
+            <div class="card rounded-2xl p-5">
+                <p class="text-xs text-gray-500 uppercase font-bold">Delivered</p>
+                <p id="kDelivered" class="text-3xl font-black text-emerald-400 mt-2">0</p>
+            </div>
+            <div class="card rounded-2xl p-5">
+                <p class="text-xs text-gray-500 uppercase font-bold">Profit</p>
+                <p id="kProfit" class="text-3xl font-black text-cyan-400 mt-2">৳0</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+            <div class="glass rounded-3xl p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <h2 class="text-lg font-bold text-white">Add Customer</h2>
+                    <span class="text-xs text-gray-500">Per session</span>
+                </div>
+                <form id="customerForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input class="input" name="name" placeholder="Customer name" required>
+                    <input class="input" name="phone" placeholder="Customer WhatsApp number" required>
+                    <select class="input" name="customerType">
+                        <option value="prepaid">Prepaid</option>
+                        <option value="trusted">Trusted</option>
+                    </select>
+                    <input class="input" name="sellRate" type="number" min="0" step="0.01" placeholder="Final sell rate" required>
+                    <input class="input" name="balance" type="number" min="0" step="0.01" placeholder="Opening balance">
+                    <input class="input" name="creditLimit" type="number" min="0" step="0.01" placeholder="Credit limit">
+                    <select class="input md:col-span-2" name="assignedAgent" id="assignedAgentSelect">
+                        <option value="">Assign agent later</option>
+                    </select>
+                    <textarea class="input md:col-span-2 min-h-[96px]" name="notes" placeholder="Notes"></textarea>
+                    <button class="btn btn-primary md:col-span-2" type="submit">Save Customer</button>
+                </form>
+            </div>
+
+            <div class="glass rounded-3xl p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <h2 class="text-lg font-bold text-white">Add Agent</h2>
+                    <span class="text-xs text-gray-500">Delivery sender</span>
+                </div>
+                <form id="agentForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input class="input" name="name" placeholder="Agent name" required>
+                    <input class="input" name="phone" placeholder="Agent WhatsApp number" required>
+                    <textarea class="input md:col-span-2 min-h-[122px]" name="notes" placeholder="Notes / remarks"></textarea>
+                    <button class="btn btn-primary md:col-span-2" type="submit">Save Agent</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+            <div class="glass rounded-3xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+                    <h2 class="text-lg font-bold text-white">Pending Customer Requests</h2>
+                    <span id="requestCount" class="text-xs text-gray-500">0 entries</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead><tr><th class="px-6 py-4 text-left">Phone</th><th class="px-6 py-4 text-left">Digits</th><th class="px-6 py-4 text-left">Last Msg</th><th class="px-6 py-4 text-right">Actions</th></tr></thead>
+                        <tbody id="requestTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="glass rounded-3xl p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <h2 class="text-lg font-bold text-white">Sign Copy Settings</h2>
+                    <span class="text-xs text-gray-500">Notify + Rate limit + Blocklist</span>
+                </div>
+                <form id="settingsForm" class="grid grid-cols-1 gap-4">
+                    <label class="flex items-center gap-3 text-sm text-gray-300">
+                        <input id="notifyEnabled" type="checkbox" class="w-4 h-4">
+                        Admin WhatsApp notification enabled
+                    </label>
+                    <textarea id="notifyTargets" class="input min-h-[96px]" placeholder="Admin numbers (one per line)"></textarea>
+                    <input id="rateLimitMinutes" class="input" type="number" min="0" step="1" placeholder="Rate limit minutes (e.g. 10)">
+                    <textarea id="blocklist" class="input min-h-[96px]" placeholder="Blocklist numbers (one per line)"></textarea>
+                    <button class="btn btn-primary" type="submit">Save Settings</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+            <div class="glass rounded-3xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+                    <h2 class="text-lg font-bold text-white">Customers</h2>
+                    <span id="customerCount" class="text-xs text-gray-500">0 entries</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead><tr><th class="px-6 py-4 text-left">Customer</th><th class="px-6 py-4 text-left">Type</th><th class="px-6 py-4 text-left">Rate</th><th class="px-6 py-4 text-left">Balance / Due</th><th class="px-6 py-4 text-right">Actions</th></tr></thead>
+                        <tbody id="customerTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="glass rounded-3xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+                    <h2 class="text-lg font-bold text-white">Agents</h2>
+                    <span id="agentCount" class="text-xs text-gray-500">0 entries</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead><tr><th class="px-6 py-4 text-left">Agent</th><th class="px-6 py-4 text-left">Last Rate</th><th class="px-6 py-4 text-left">Payable</th><th class="px-6 py-4 text-left">Delivered</th></tr></thead>
+                        <tbody id="agentTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass rounded-3xl overflow-hidden mb-8">
+            <div class="px-6 py-4 border-b border-gray-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <h2 class="text-lg font-bold text-white">Orders & Review Queue</h2>
+                <div class="flex gap-3">
+                    <select id="orderStatusFilter" class="input" onchange="loadOrders()">
+                        <option value="">All statuses</option>
+                        <option value="PENDING">Pending</option>
+                        <option value="DELIVERED">Delivered</option>
+                        <option value="FUNDS_HOLD">Funds Hold</option>
+                        <option value="MANUAL_REVIEW">Manual Review</option>
+                    </select>
+                    <button class="btn btn-dark" onclick="loadReviewDocs()">Review Docs</button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead><tr><th class="px-6 py-4 text-left">Digit</th><th class="px-6 py-4 text-left">Customer</th><th class="px-6 py-4 text-left">Agent</th><th class="px-6 py-4 text-left">Status</th><th class="px-6 py-4 text-left">Billing</th><th class="px-6 py-4 text-right">Action</th></tr></thead>
+                    <tbody id="orderTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div class="glass rounded-3xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-800">
+                    <h2 class="text-lg font-bold text-white">Manual Review Documents</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead><tr><th class="px-6 py-4 text-left">File</th><th class="px-6 py-4 text-left">Agent</th><th class="px-6 py-4 text-left">Reason</th></tr></thead>
+                        <tbody id="docTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="glass rounded-3xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-800">
+                    <h2 class="text-lg font-bold text-white">Recent Ledger</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead><tr><th class="px-6 py-4 text-left">Type</th><th class="px-6 py-4 text-left">Target</th><th class="px-6 py-4 text-left">Amount</th><th class="px-6 py-4 text-left">Time</th></tr></thead>
+                        <tbody id="ledgerTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="approveModal" class="fixed inset-0 hidden items-center justify-center bg-black/70 p-4">
+        <div class="glass rounded-3xl w-full max-w-2xl p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="text-lg font-bold text-white">Approve Customer</h3>
+                <button class="btn btn-dark" type="button" onclick="closeApproveModal()"><i class="fas fa-xmark"></i></button>
+            </div>
+            <form id="approveForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input id="approveRequestId" class="hidden">
+                <input id="approvePhone" class="input md:col-span-2" placeholder="Phone" disabled>
+                <input id="approveName" class="input" placeholder="Customer name" required>
+                <select id="approveType" class="input">
+                    <option value="prepaid">Prepaid</option>
+                    <option value="trusted">Trusted</option>
+                </select>
+                <input id="approveSellRate" class="input" type="number" min="0" step="0.01" placeholder="Final sell rate" required>
+                <select id="approveAgent" class="input">
+                    <option value="">Assign agent later</option>
+                </select>
+                <input id="approveBalance" class="input" type="number" min="0" step="0.01" placeholder="Opening balance">
+                <input id="approveCreditLimit" class="input" type="number" min="0" step="0.01" placeholder="Credit limit">
+                <textarea id="approveNotes" class="input md:col-span-2 min-h-[96px]" placeholder="Notes"></textarea>
+                <div class="md:col-span-2 flex gap-3">
+                    <button class="btn btn-primary flex-1" type="submit">Approve & Create Orders</button>
+                    <button class="btn btn-dark" type="button" onclick="closeApproveModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const SESSION_API = '/api/session';
+        const BASE = '/api/template/signcopy';
+        let activeSessionId = '';
+        let agentsCache = [];
+
+        async function api(url, options = {}) {
+            const res = await fetch(url, {
+                headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+                credentials: 'same-origin',
+                ...options,
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'Request failed');
+            return data;
+        }
+
+        function statusBadge(status) {
+            if (status === 'DELIVERED') return `<span class="badge badge-green">DELIVERED</span>`;
+            if (status === 'PENDING' || status === 'MATCHED') return `<span class="badge badge-yellow">${status}</span>`;
+            if (status === 'FUNDS_HOLD' || status === 'MANUAL_REVIEW' || status === 'FAILED') return `<span class="badge badge-red">${status}</span>`;
+            return `<span class="badge badge-gray">${status || 'N/A'}</span>`;
+        }
+
+        function fmtMoney(value) {
+            return `৳${Number(value || 0).toFixed(2)}`;
+        }
+
+        async function loadSessions() {
+            const data = await api(`${SESSION_API}/list`);
+            const select = document.getElementById('sessionSelect');
+            const sessions = data.sessions || [];
+            select.innerHTML = sessions.length
+                ? sessions.map(s => `<option value="${s._id}">${String(s._id).slice(-10)} • ${s.status}</option>`).join('')
+                : '<option value="">No session found</option>';
+            activeSessionId = select.value || '';
+            select.onchange = () => {
+                activeSessionId = select.value;
+                reloadAll();
+            };
+        }
+
+        async function loadOverview() {
+            const data = await api(`${BASE}/overview?sessionId=${activeSessionId}`);
+            const o = data.overview;
+            document.getElementById('kCustomers').textContent = o.customers;
+            document.getElementById('kAgents').textContent = o.agents;
+            document.getElementById('kRequests').textContent = o.pendingRequests ?? 0;
+            document.getElementById('kPending').textContent = o.orderStats.pending;
+            document.getElementById('kDelivered').textContent = o.orderStats.delivered;
+            document.getElementById('kProfit').textContent = fmtMoney(o.finance.profit);
+            renderLedger(o.recentLedger || []);
+        }
+
+        async function loadSettings() {
+            const data = await api(`${BASE}/settings?sessionId=${activeSessionId}`);
+            const s = data.settings || {};
+            document.getElementById('notifyEnabled').checked = s.notifyEnabled !== false;
+            document.getElementById('notifyTargets').value = (s.notifyTargets || []).join('\n');
+            document.getElementById('rateLimitMinutes').value = s.rateLimitMinutes ?? 10;
+            document.getElementById('blocklist').value = (s.blocklist || []).join('\n');
+        }
+
+        async function loadRequests() {
+            const data = await api(`${BASE}/requests?sessionId=${activeSessionId}&status=pending`);
+            const rows = data.requests || [];
+            document.getElementById('requestCount').textContent = `${rows.length} entries`;
+            document.getElementById('requestTable').innerHTML = rows.length ? rows.map(r => `
+                <tr>
+                    <td class="px-6 py-4">
+                        <div class="font-semibold text-white">${r.phone}</div>
+                        <div class="text-xs text-gray-500">${r.senderName || ''}</div>
+                        <div class="text-xs text-gray-600 mt-1">${new Date(r.lastSeenAt || r.updatedAt).toLocaleString()}</div>
+                    </td>
+                    <td class="px-6 py-4 font-mono text-cyan-400">${(r.requestedDigits || []).slice(0, 6).join(', ') || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-300">${(r.lastMessage || '').slice(0, 80) || '-'}</td>
+                    <td class="px-6 py-4 text-right space-x-2">
+                        <button class="btn btn-primary !py-2 !px-3" onclick="openApproveModal('${r._id}')">Approve</button>
+                        <button class="btn btn-dark !py-2 !px-3" onclick="rejectRequest('${r._id}')">Reject</button>
+                        <button class="btn btn-dark !py-2 !px-3" onclick="blockRequest('${r._id}')">Block</button>
+                    </td>
+                </tr>
+            `).join('') : `<tr><td colspan="4" class="px-6 py-10 text-center text-gray-500">No pending requests</td></tr>`;
+        }
+
+        async function openApproveModal(requestId) {
+            const data = await api(`${BASE}/requests?sessionId=${activeSessionId}&status=pending`);
+            const r = (data.requests || []).find(x => x._id === requestId);
+            if (!r) throw new Error('Request not found');
+
+            document.getElementById('approveRequestId').value = r._id;
+            document.getElementById('approvePhone').value = r.phone;
+            document.getElementById('approveName').value = r.senderName || '';
+            document.getElementById('approveType').value = 'prepaid';
+            document.getElementById('approveSellRate').value = '';
+            document.getElementById('approveBalance').value = '';
+            document.getElementById('approveCreditLimit').value = '';
+            document.getElementById('approveNotes').value = '';
+
+            document.getElementById('approveAgent').innerHTML = `<option value="">Assign agent later</option>` +
+                agentsCache.map(a => `<option value="${a._id}">${a.name} • ${a.phone}</option>`).join('');
+
+            const modal = document.getElementById('approveModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeApproveModal() {
+            const modal = document.getElementById('approveModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        async function rejectRequest(requestId) {
+            if (!confirm('Reject this customer request?')) return;
+            await api(`${BASE}/requests/${requestId}/reject`, { method: 'POST', body: JSON.stringify({}) });
+            await reloadAll();
+        }
+
+        async function blockRequest(requestId) {
+            if (!confirm('Block this number? It will be added to blocklist.')) return;
+            await api(`${BASE}/requests/${requestId}/block`, { method: 'POST', body: JSON.stringify({}) });
+            await reloadAll();
+        }
+
+        async function loadCustomers() {
+            const data = await api(`${BASE}/customers?sessionId=${activeSessionId}`);
+            const rows = data.customers || [];
+            document.getElementById('customerCount').textContent = `${rows.length} entries`;
+            document.getElementById('customerTable').innerHTML = rows.length ? rows.map(c => `
+                <tr>
+                    <td class="px-6 py-4">
+                        <div class="font-semibold text-white">${c.name}</div>
+                        <div class="text-xs text-gray-500">${c.phone}</div>
+                        <div class="text-xs text-gray-600 mt-1">${c.assignedAgent?.name ? `Agent: ${c.assignedAgent.name}` : 'No agent assigned'}</div>
+                    </td>
+                    <td class="px-6 py-4">${statusBadge(c.customerType === 'prepaid' ? 'PENDING' : 'MANUAL_REVIEW').replace(c.customerType === 'prepaid' ? 'PENDING' : 'MANUAL_REVIEW', c.customerType.toUpperCase())}</td>
+                    <td class="px-6 py-4 font-bold text-emerald-400">${fmtMoney(c.sellRate)}</td>
+                    <td class="px-6 py-4">
+                        <div class="text-emerald-400 text-sm">Bal: ${fmtMoney(c.balance)}</div>
+                        <div class="text-rose-400 text-sm">Due: ${fmtMoney(c.dueAmount)}</div>
+                    </td>
+                    <td class="px-6 py-4 text-right space-x-2">
+                        <button class="btn btn-dark !py-2 !px-3" onclick="customerTransaction('${c._id}', '${c.customerType}')">${c.customerType === 'prepaid' ? 'Topup' : 'Receive'}</button>
+                    </td>
+                </tr>
+            `).join('') : `<tr><td colspan="5" class="px-6 py-10 text-center text-gray-500">No customers found</td></tr>`;
+        }
+
+        async function loadAgents() {
+            const data = await api(`${BASE}/agents?sessionId=${activeSessionId}`);
+            agentsCache = data.agents || [];
+            document.getElementById('assignedAgentSelect').innerHTML = `<option value="">Assign agent later</option>` +
+                agentsCache.map(a => `<option value="${a._id}">${a.name} • ${a.phone}</option>`).join('');
+            document.getElementById('agentCount').textContent = `${agentsCache.length} entries`;
+            document.getElementById('agentTable').innerHTML = agentsCache.length ? agentsCache.map(a => `
+                <tr>
+                    <td class="px-6 py-4">
+                        <div class="font-semibold text-white">${a.name}</div>
+                        <div class="text-xs text-gray-500">${a.phone}</div>
+                    </td>
+                    <td class="px-6 py-4 text-amber-400 font-bold">${a.lastDetectedRate != null ? fmtMoney(a.lastDetectedRate) : 'N/A'}</td>
+                    <td class="px-6 py-4 text-cyan-400 font-bold">${fmtMoney(a.totalPayable)}</td>
+                    <td class="px-6 py-4">${a.totalDelivered || 0}</td>
+                </tr>
+            `).join('') : `<tr><td colspan="4" class="px-6 py-10 text-center text-gray-500">No agents found</td></tr>`;
+        }
+
+        async function loadOrders() {
+            const filter = document.getElementById('orderStatusFilter').value;
+            const query = filter ? `&status=${encodeURIComponent(filter)}` : '';
+            const data = await api(`${BASE}/orders?sessionId=${activeSessionId}${query}`);
+            const rows = data.orders || [];
+            document.getElementById('orderTable').innerHTML = rows.length ? rows.map(o => `
+                <tr>
+                    <td class="px-6 py-4 font-mono text-cyan-400">${o.requestedDigit}</td>
+                    <td class="px-6 py-4">
+                        <div class="font-semibold text-white">${o.customer?.name || 'N/A'}</div>
+                        <div class="text-xs text-gray-500">${o.customer?.phone || ''}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="font-semibold text-white">${o.agent?.name || 'N/A'}</div>
+                        <div class="text-xs text-gray-500">${o.agent?.phone || ''}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        ${statusBadge(o.status)}
+                        <div class="text-xs text-gray-500 mt-1">${o.reviewReason || '-'}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-emerald-400 text-sm">Sell: ${fmtMoney(o.customerSellRate)}</div>
+                        <div class="text-amber-400 text-sm">Agent: ${fmtMoney(o.detectedAgentRate)}</div>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        ${(o.status === 'FUNDS_HOLD' || o.status === 'MANUAL_REVIEW' || o.status === 'MATCHED') && o.matchedDocument ? `<button class="btn btn-dark !py-2 !px-3" onclick="retryOrder('${o._id}')">Retry</button>` : '<span class="text-xs text-gray-600">-</span>'}
+                    </td>
+                </tr>
+            `).join('') : `<tr><td colspan="6" class="px-6 py-10 text-center text-gray-500">No orders found</td></tr>`;
+        }
+
+        async function loadReviewDocs() {
+            const data = await api(`${BASE}/documents?sessionId=${activeSessionId}&status=MANUAL_REVIEW`);
+            const rows = data.documents || [];
+            document.getElementById('docTable').innerHTML = rows.length ? rows.map(d => `
+                <tr>
+                    <td class="px-6 py-4">
+                        <div class="font-semibold text-white">${d.originalFileName || 'Untitled PDF'}</div>
+                        <div class="text-xs text-gray-500">${d.extractionMethod || 'NONE'} • ${d.rateDetected != null ? fmtMoney(d.rateDetected) : 'No rate'}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="font-semibold text-white">${d.agent?.name || 'N/A'}</div>
+                        <div class="text-xs text-gray-500">${d.agent?.phone || ''}</div>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-rose-300">${d.reviewReason || '-'}</td>
+                </tr>
+            `).join('') : `<tr><td colspan="3" class="px-6 py-10 text-center text-gray-500">No review items</td></tr>`;
+        }
+
+        function renderLedger(rows) {
+            document.getElementById('ledgerTable').innerHTML = rows.length ? rows.map(l => `
+                <tr>
+                    <td class="px-6 py-4 font-semibold text-white">${l.entryType}</td>
+                    <td class="px-6 py-4">
+                        <div class="font-semibold text-white">${l.customer?.name || l.agent?.name || '-'}</div>
+                        <div class="text-xs text-gray-500">${l.order?.requestedDigit || l.note || ''}</div>
+                    </td>
+                    <td class="px-6 py-4 font-bold ${l.entryType === 'PROFIT' ? 'text-emerald-400' : 'text-cyan-400'}">${fmtMoney(l.amount)}</td>
+                    <td class="px-6 py-4 text-xs text-gray-500">${new Date(l.createdAt).toLocaleString()}</td>
+                </tr>
+            `).join('') : `<tr><td colspan="4" class="px-6 py-10 text-center text-gray-500">No ledger entries yet</td></tr>`;
+        }
+
+        async function customerTransaction(customerId, customerType) {
+            const amount = prompt(customerType === 'prepaid' ? 'Topup amount?' : 'Received payment amount?');
+            if (!amount) return;
+            const type = customerType === 'prepaid' ? 'PREPAID_TOPUP' : 'TRUSTED_PAYMENT';
+            await api(`${BASE}/customers/${customerId}/transaction`, {
+                method: 'POST',
+                body: JSON.stringify({ amount, type, note: customerType === 'prepaid' ? 'Manual topup from dashboard' : 'Payment received from trusted customer' }),
+            });
+            await reloadAll();
+        }
+
+        async function retryOrder(orderId) {
+            const override = prompt('Override agent rate? Leave empty to use detected rate.');
+            await api(`${BASE}/orders/${orderId}/retry`, {
+                method: 'POST',
+                body: JSON.stringify({ overrideAgentRate: override === '' ? null : override }),
+            });
+            await reloadAll();
+        }
+
+        async function reloadAll() {
+            if (!activeSessionId) return;
+            await Promise.all([
+                loadOverview(),
+                loadCustomers(),
+                loadAgents(),
+                loadOrders(),
+                loadReviewDocs(),
+                loadRequests(),
+                loadSettings(),
+            ]);
+        }
+
+        document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const targets = String(document.getElementById('notifyTargets').value || '').split('\n').map(v => v.trim()).filter(Boolean);
+            const blocklist = String(document.getElementById('blocklist').value || '').split('\n').map(v => v.trim()).filter(Boolean);
+            await api(`${BASE}/settings`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    sessionId: activeSessionId,
+                    notifyEnabled: document.getElementById('notifyEnabled').checked,
+                    notifyTargets: targets,
+                    rateLimitMinutes: document.getElementById('rateLimitMinutes').value || 10,
+                    blocklist,
+                }),
+            });
+            await reloadAll();
+        });
+
+        document.getElementById('approveForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const requestId = document.getElementById('approveRequestId').value;
+            await api(`${BASE}/requests/${requestId}/approve`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: document.getElementById('approveName').value,
+                    customerType: document.getElementById('approveType').value,
+                    assignedAgent: document.getElementById('approveAgent').value || null,
+                    sellRate: document.getElementById('approveSellRate').value,
+                    balance: document.getElementById('approveBalance').value || 0,
+                    creditLimit: document.getElementById('approveCreditLimit').value || 0,
+                    notes: document.getElementById('approveNotes').value || '',
+                }),
+            });
+            closeApproveModal();
+            await reloadAll();
+        });
+
+        document.getElementById('customerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = new FormData(e.target);
+            await api(`${BASE}/customers`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    sessionId: activeSessionId,
+                    name: form.get('name'),
+                    phone: form.get('phone'),
+                    customerType: form.get('customerType'),
+                    assignedAgent: form.get('assignedAgent') || null,
+                    sellRate: form.get('sellRate'),
+                    balance: form.get('balance') || 0,
+                    creditLimit: form.get('creditLimit') || 0,
+                    notes: form.get('notes') || '',
+                }),
+            });
+            e.target.reset();
+            await reloadAll();
+        });
+
+        document.getElementById('agentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = new FormData(e.target);
+            await api(`${BASE}/agents`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    sessionId: activeSessionId,
+                    name: form.get('name'),
+                    phone: form.get('phone'),
+                    notes: form.get('notes') || '',
+                }),
+            });
+            e.target.reset();
+            await reloadAll();
+        });
+
+        (async function init() {
+            try {
+                await loadSessions();
+                await reloadAll();
+            } catch (error) {
+                console.error(error);
+                alert(error.message || 'Failed to load sign copy module');
+            }
+        })();
+    </script>
+</body>
+</html>

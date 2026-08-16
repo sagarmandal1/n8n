@@ -1,0 +1,386 @@
+[
+  {
+    "updatedAt": "2026-08-14T16:55:45.380Z",
+    "createdAt": "2026-08-01T09:59:20.494Z",
+    "id": "whatsappExpressN8nReply",
+    "name": "WhatsApp Express - n8n Auto Reply",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "whatsapp-express-events",
+          "authentication": "headerAuth",
+          "responseMode": "onReceived",
+          "options": {}
+        },
+        "id": "b1111111-1111-4111-8111-111111111111",
+        "name": "WhatsApp Express Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "b1111111-1111-4111-8111-111111111112",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "waExpressInboundSecret01",
+            "name": "WhatsApp Express - Webhook Secret"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const input = $input.first().json;\nconst body = input.body && typeof input.body === 'object' ? input.body : {};\nconst data = body.data && typeof body.data === 'object' ? body.data : {};\nif (body.event !== 'message.sent') return [];\nconst to = String(data.to || '').trim();\nif (!to || to.endsWith('@g.us')) return [];\nlet customerId = to.replace(/\\D/g, '');\nif (customerId.startsWith('01') && customerId.length === 11) customerId = '88' + customerId;\nconst content = String(data.message || '').trim().slice(0, 12000);\nconst sessionId = String(body.sessionId || '').trim();\nconst messageId = String(data.messageId || body.id || '').trim();\nif (customerId.length < 7 || customerId.length > 15 || !content || !sessionId) return [];\nreturn [{ json: {\n  memory_session_id: `whatsapp:${sessionId}:${customerId}`,\n  memory_message: {\n    type: 'ai',\n    content,\n    additional_kwargs: {\n      source: 'wafastapi_sent_sync',\n      message_id: messageId,\n      historical: false,\n    },\n    response_metadata: {},\n    invalid_tool_calls: [],\n  },\n} }];"
+        },
+        "id": "b8888888-8888-4888-8888-888888888888",
+        "name": "Store Sent Reply in Memory",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          260,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO deepseek_customer_chat_memory (session_id, message) VALUES ($1, $2::jsonb);",
+          "options": {
+            "queryReplacement": "={{ [$json.memory_session_id, $json.memory_message] }}"
+          }
+        },
+        "id": "b9999999-9999-4999-8999-999999999999",
+        "name": "Persist Sent Reply Memory",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          520,
+          300
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "pgMemoryWhatsAppAgent01",
+            "name": "Postgres Memory - WhatsApp Agent"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const input = $input.first().json;\nconst body = input.body && typeof input.body === 'object' ? input.body : {};\nconst data = body.data && typeof body.data === 'object' ? body.data : {};\n\nif (body.event !== 'message.received') return [];\n\nlet customerId = String(data.from || '').replace(/\\D/g, '');\nif (customerId.startsWith('01') && customerId.length === 11) customerId = '88' + customerId;\nconst rawMessage = String(data.message || '').trim();\nconst hasMedia = Boolean(data.mediaUrl || data.mimeType || data.fileName || data.ocrText || data.ocrMethod);\nconst message = rawMessage.slice(0, hasMedia ? 12000 : 2000);\nconst messageId = String(data.messageId || body.id || '').trim();\nconst sessionId = String(body.sessionId || '').trim();\nif (customerId.length < 7 || customerId.length > 15 || !message || !sessionId) return [];\n\nconst state = $getWorkflowStaticData('global');\nconst now = Date.now();\nconst maxAge = 24 * 60 * 60 * 1000;\nstate.seen = state.seen && typeof state.seen === 'object' ? state.seen : {};\nfor (const [key, timestamp] of Object.entries(state.seen)) {\n  if (now - Number(timestamp) > maxAge) delete state.seen[key];\n}\nconst dedupeKey = sessionId + ':' + (messageId || body.id || customerId + ':' + message);\nif (state.seen[dedupeKey]) return [];\nstate.seen[dedupeKey] = now;\n\nreturn [{ json: {\n  customer_id: customerId,\n  message,\n  message_id: messageId,\n  session_id: sessionId,\n  webhook_event_id: String(body.id || ''),\n  has_media: hasMedia,\n  media_url: String(data.mediaUrl || ''),\n  media_type: String(data.mimeType || data.type || ''),\n  media_filename: String(data.fileName || ''),\n  ocr_text: String(data.ocrText || '').slice(0, 12000),\n  extraction_method: String(data.ocrMethod || 'NONE'),\n  has_media: hasMedia,\n  media_url: String(data.mediaUrl || ''),\n  media_type: String(data.mimeType || data.type || ''),\n  media_filename: String(data.fileName || ''),\n  ocr_text: String(data.ocrText || '').slice(0, 12000),\n  extraction_method: String(data.ocrMethod || 'NONE'),\n  has_media: hasMedia,\n  media_url: String(data.mediaUrl || ''),\n  media_type: String(data.mimeType || data.type || ''),\n  media_filename: String(data.fileName || ''),\n  ocr_text: String(data.ocrText || '').slice(0, 12000),\n  extraction_method: String(data.ocrMethod || 'NONE'),\n} }];"
+        },
+        "id": "b2222222-2222-4222-8222-222222222222",
+        "name": "Filter and Deduplicate",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          260,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://127.0.0.1:5678/webhook/deepseek-chat",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ customer_id: $json.customer_id, session_id: $json.session_id, message: $json.message, message_id: $json.message_id, has_media: $json.has_media, media_url: $json.media_url, media_type: $json.media_type, media_filename: $json.media_filename, ocr_text: $json.ocr_text, extraction_method: $json.extraction_method }) }}",
+          "options": {
+            "timeout": 130000
+          }
+        },
+        "id": "b3333333-3333-4333-8333-333333333333",
+        "name": "Call DeepSeek Agent",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          520,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const agent = $input.first().json;\nconst inbound = $('Filter and Deduplicate').first().json;\nconst generated = String(agent.reply || '').trim();\nconst reply = generated || 'দুঃখিত, আমাদের স্বয়ংক্রিয় সেবা এই মুহূর্তে সাময়িকভাবে বন্ধ রয়েছে। আমাদের দলের একজন সদস্য আপনার বার্তাটি দেখে যত দ্রুত সম্ভব উত্তর দেবেন।';\nif (!inbound.customer_id || !reply) return [];\nreturn [{ json: {\n  customer_id: inbound.customer_id,\n  message_id: inbound.message_id,\n  session_id: inbound.session_id,\n  reply: reply.slice(0, 1000),\n  agent_success: Boolean(generated),\n  agent_reason: agent.reason || (generated ? 'ok' : 'agent_unavailable'),\n} }];"
+        },
+        "id": "b4444444-4444-4444-8444-444444444444",
+        "name": "Prepare WhatsApp Reply",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          780,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://wafastapi.com/api/whatsapp/send/text",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ number: $node[\"Prepare WhatsApp Reply\"].json.customer_id, message: $node[\"Prepare WhatsApp Reply\"].json.reply }) }}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "b5555555-5555-4555-8555-555555555555",
+        "name": "Send WhatsApp Reply",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1040,
+          0
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "waExpressReplyApi01",
+            "name": "WhatsApp Express - Reply API"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "return [{ json: { autoReplyEnabled: false, replyMode: 'human_review', source: 'wafastapi-api' } }];"
+        },
+        "id": "b6666666-6666-4666-8666-666666666666",
+        "name": "Check Reply Mode",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1040,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{$json.autoReplyEnabled}}",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "id": "b7777777-7777-4777-8777-777777777777",
+        "name": "Auto Reply Enabled?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1260,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const item = $('Filter and Deduplicate').first().json;\nif (!item.customer_id || !item.session_id || !item.message) return [];\nreturn [{ json: { memory_session_id: `whatsapp:${item.session_id}:${item.customer_id}`, memory_message: { type: 'human', content: String(item.message).slice(0, 12000), additional_kwargs: { source: 'wafastapi_received_learning', message_id: item.message_id, media_url: item.media_url || '', media_type: item.media_type || '', media_filename: item.media_filename || '', extraction_method: item.extraction_method || 'NONE', historical: false }, response_metadata: {} } } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1500,
+          180
+        ],
+        "id": "ba111111-1111-4111-8111-111111111111",
+        "name": "Prepare Received Learning Memory"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO deepseek_customer_chat_memory (session_id, message) VALUES ($1, $2::jsonb);",
+          "options": {
+            "queryReplacement": "={{ [$json.memory_session_id, $json.memory_message] }}"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1740,
+          180
+        ],
+        "id": "ba222222-2222-4222-8222-222222222222",
+        "name": "Persist Received Learning Memory",
+        "credentials": {
+          "postgres": {
+            "id": "pgMemoryWhatsAppAgent01",
+            "name": "Postgres Memory - WhatsApp Agent"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "WhatsApp Express Webhook": {
+        "main": [
+          [
+            {
+              "node": "Filter and Deduplicate",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Store Sent Reply in Memory",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Store Sent Reply in Memory": {
+        "main": [
+          [
+            {
+              "node": "Persist Sent Reply Memory",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter and Deduplicate": {
+        "main": [
+          [
+            {
+              "node": "Check Reply Mode",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Reply Mode": {
+        "main": [
+          [
+            {
+              "node": "Auto Reply Enabled?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Auto Reply Enabled?": {
+        "main": [
+          [
+            {
+              "node": "Prepare Received Learning Memory",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare Received Learning Memory",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call DeepSeek Agent": {
+        "main": [
+          [
+            {
+              "node": "Prepare WhatsApp Reply",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare WhatsApp Reply": {
+        "main": [
+          [
+            {
+              "node": "Send WhatsApp Reply",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send WhatsApp Reply": {
+        "main": [
+          []
+        ]
+      },
+      "Prepare Received Learning Memory": {
+        "main": [
+          [
+            {
+              "node": "Persist Received Learning Memory",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "meta": {
+      "templateCredsSetupCompleted": true
+    },
+    "nodeGroups": [],
+    "pinData": {},
+    "versionId": "e1b7c766-4470-473a-804d-51b035325429",
+    "activeVersionId": "e1b7c766-4470-473a-804d-51b035325429",
+    "versionCounter": 10,
+    "triggerCount": 1,
+    "sourceWorkflowId": null,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-08-01T09:59:20.494Z",
+        "createdAt": "2026-08-01T09:59:20.494Z",
+        "role": "workflow:owner",
+        "workflowId": "whatsappExpressN8nReply",
+        "projectId": "yYS1uaZbNGDw3HVU",
+        "project": {
+          "updatedAt": "2026-07-27T09:26:07.187Z",
+          "createdAt": "2026-07-27T08:49:45.436Z",
+          "id": "yYS1uaZbNGDw3HVU",
+          "name": "Sagar Mandal <sagarmandal712103@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "customTelemetryTags": [],
+          "creatorId": "c15fb285-74b6-4996-8245-3f71626f5b49"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]

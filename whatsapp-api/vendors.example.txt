@@ -1,0 +1,9 @@
+# VENDOR LIST — copy to vendors.txt and fill in real numbers.
+#
+# Anyone listed here is a VENDOR (seller). Everyone else is a CUSTOMER.
+# One vendor per line:  Name, MobileNumber
+# Separator may be a comma, pipe, colon or tab.
+# Numbers accepted as 01712345678 or 8801712345678.
+# Lines starting with # are ignored. Edits apply within seconds, no restart.
+
+Example Vendor, 8801700000000
