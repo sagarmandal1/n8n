@@ -152,7 +152,8 @@ async function forwardUndeliveredDocument({
   // naturally match nothing — forwarding that to the review group both floods
   // the group and copies the customer's private documents somewhere they do
   // not belong.
-  if (!isVendor(senderPhone)) {
+  await refreshDbVendors(userId, sessionId);
+  if (!isVendor(userId, sessionId, senderPhone)) {
     return false;
   }
 
@@ -268,13 +269,25 @@ const MESSAGE_WRAPPER_KEYS = [
 // Keep the dashboard-managed vendor list current. isVendor() is synchronous and
 // runs on every message, so the set is cached; this tops it up on a short TTL
 // rather than querying per message.
-async function refreshDbVendors(userId) {
-  if (!dbVendorsStale()) return;
+async function refreshDbVendors(userId, sessionId) {
+  if (!dbVendorsStale(userId, sessionId)) return;
+
   try {
-    const sessions = await sessionModel.find({ user: userId }, "vendorNumbers").lean();
-    setDbVendors(sessions.flatMap((entry) => entry.vendorNumbers || []));
+    const session = await sessionModel.findOne(
+      { _id: sessionId, user: String(userId) },
+      "vendorNumbers"
+    ).lean();
+
+    setDbVendors(
+      userId,
+      sessionId,
+      session?.vendorNumbers || []
+    );
   } catch (err) {
-    console.error("[Vendors] could not refresh dashboard list:", err.message);
+    console.error(
+      `[Vendors] could not refresh dashboard list [Session: ${sessionId}]:`,
+      err.message
+    );
   }
 }
 
@@ -310,7 +323,7 @@ function resolveActualMessage(message) {
   return { actualMessage, msgType };
 }
 
-function findVendorToVendorTarget(message, senderPhone) {
+function findVendorToVendorTarget(message, userId, sessionId, senderPhone) {
   const sender = normalizePhone(senderPhone);
   const contexts = [
     message?.extendedTextMessage?.contextInfo,
@@ -322,10 +335,10 @@ function findVendorToVendorTarget(message, senderPhone) {
   for (const context of contexts) {
     for (const jid of context.mentionedJid || []) {
       const phone = normalizePhone(String(jid).replace(/@.*$/, ""));
-      if (phone && phone !== sender && isVendor(phone)) return phone;
+      if (phone && phone !== sender && isVendor(userId, sessionId, phone)) return phone;
     }
     const quotedAuthor = normalizePhone(String(context.participant || "").replace(/@.*$/, ""));
-    if (quotedAuthor && quotedAuthor !== sender && isVendor(quotedAuthor)) return quotedAuthor;
+    if (quotedAuthor && quotedAuthor !== sender && isVendor(userId, sessionId, quotedAuthor)) return quotedAuthor;
   }
   return "";
 }
@@ -742,12 +755,13 @@ export async function initSession(userId, sessionId) {
             // by content alone — decisive once many customers share a name.
             try {
               const recipientPhone = String(resolvedRecipient || "").replace(/@.*$/, "");
-              if (sentBody && isVendor(recipientPhone)) {
+              await refreshDbVendors(userId, sessionId);
+              if (sentBody && isVendor(userId, sessionId, recipientPhone)) {
                 const assigned = await assignOrdersToVendor({
                   userId, sessionId, vendorPhone: recipientPhone, text: sentBody,
                 });
                 for (const order of assigned) {
-                  console.log(`[Assignment] ${order.applicationId} (customer ${order.customerPhone}) -> vendor ${recipientPhone} (${vendorName(recipientPhone)})`);
+                  console.log(`[Assignment] ${order.applicationId} (customer ${order.customerPhone}) -> vendor ${recipientPhone} (${vendorName(userId, sessionId, recipientPhone)})`);
                 }
               }
             } catch (assignErr) {
@@ -1094,17 +1108,17 @@ export async function initSession(userId, sessionId) {
                // the sender is not the matched order's own customer, so a
                // document from customer A that matched customer B's order
                // would be delivered straight to B. vendors.txt decides.
-               await refreshDbVendors(userId);
-               const senderIsVendor = isVendor(senderPhone);
+               await refreshDbVendors(userId, sessionId);
+               const senderIsVendor = isVendor(userId, sessionId, senderPhone);
                // A vendor handing a file to another vendor is an intermediate
                // step in their own workflow, not finished work for a customer.
                // Automatic delivery is reserved for a completed file coming back
                // to the CEO; these stay manual until the customer is verified.
                const vendorToVendorTarget = senderIsVendor
-                 ? findVendorToVendorTarget(actualMessage, senderPhone)
+                 ? findVendorToVendorTarget(actualMessage, userId, sessionId, senderPhone)
                  : "";
                if (vendorToVendorTarget) {
-                 console.log(`[Vendor-to-Vendor] file from ${senderPhone} (${vendorName(senderPhone)}) addressed to vendor ${vendorToVendorTarget} (${vendorName(vendorToVendorTarget)}) - not delivered, manual handling`);
+                 console.log(`[Vendor-to-Vendor] file from ${senderPhone} (${vendorName(userId, sessionId, senderPhone)}) addressed to vendor ${vendorToVendorTarget} (${vendorName(userId, sessionId, vendorToVendorTarget)}) - not delivered, manual handling`);
                  await recordDeliveryAudit({
                    userId,
                    sessionId,
@@ -1145,7 +1159,7 @@ export async function initSession(userId, sessionId) {
                      // vendor. Inferring it from delivery history as well would
                      // let a number count as a vendor for order creation while
                      // still failing the vendors.txt check used elsewhere.
-                     if (isVendor(historicalMessage.fromNumber)) continue;
+                     if (isVendor(userId, sessionId, historicalMessage.fromNumber)) continue;
                      await upsertDynamicOrder({
                        userId,
                        sessionId,
@@ -1470,22 +1484,116 @@ export async function initSession(userId, sessionId) {
                      extraLines: [`সম্ভাব্য order: ${match.order.applicationId}`],
                    });
                  } else {
-                   await recordDeliveryAudit({
-                     userId,
-                     sessionId,
-                     messageId: msg?.key?.id || "",
-                     customerPhone: sender,
-                     outcome: "NO_MATCH",
-                     confidence: 0,
-                     needsReview: true,
-                     details: { matchedFile: mediaMeta?.fileName || "", ocrMethod: mediaMeta?.ocrMethod || "NONE" },
-                   });
-                   await forwardUndeliveredDocument({
-                     sock, userId, sessionId,
-                     outcome: "NO_MATCH",
-                     buffer: downloadedMediaBuffer,
-                     mediaMeta, msgType, senderPhone: sender,
-                   });
+                   // Before declaring NO_MATCH, check whether these exact file
+                   // bytes were already delivered earlier in this account/session.
+                   //
+                   // This is important after an order becomes DELIVERED: the order
+                   // may no longer qualify as a pending match, but an identical
+                   // vendor resend is still a DUPLICATE, not a NO_MATCH.
+                   const unmatchedFileHash = crypto
+                     .createHash("sha256")
+                     .update(downloadedMediaBuffer)
+                     .digest("hex");
+
+                   const priorDeliveries = await DeliveredFile.find({
+                     user: userId,
+                     session: sessionId,
+                     fileHash: unmatchedFileHash,
+                   })
+                     .sort({ createdAt: -1 })
+                     .lean();
+
+                   if (priorDeliveries.length) {
+                     const priorCustomers = [
+                       ...new Set(
+                         priorDeliveries
+                           .map((item) => normalizePhone(item.customerPhone))
+                           .filter(Boolean)
+                       ),
+                     ];
+
+                     const prior = priorDeliveries[0];
+                     const duplicateCustomer =
+                       priorCustomers.length === 1 ? priorCustomers[0] : "";
+
+                     console.log(
+                       `[Duplicate] ${mediaMeta?.fileName || "file"} already exists in delivery history - not treating as NO_MATCH`
+                     );
+
+                     await recordDeliveryAudit({
+                       userId,
+                       sessionId,
+                       messageId: msg?.key?.id || "",
+                       customerPhone: duplicateCustomer || sender,
+                       outcome: "DUPLICATE",
+                       confidence: 1,
+                       needsReview: true,
+                       details: {
+                         matchedFile: mediaMeta?.fileName || "",
+                         applicationId: prior?.applicationId || "",
+                         reason: "identical file hash already exists in delivery history",
+                         priorCustomerCount: priorCustomers.length,
+                       },
+                     });
+
+                     const duplicateExtraLines = [];
+
+                     if (duplicateCustomer) {
+                       duplicateExtraLines.push(
+                         `Customer Number: ${duplicateCustomer}`
+                       );
+                     } else {
+                       duplicateExtraLines.push(
+                         `Previously delivered to ${priorCustomers.length} customers; manual verification required.`
+                       );
+                     }
+
+                     if (prior?.createdAt) {
+                       duplicateExtraLines.push(
+                         `Delivered on: ${new Date(prior.createdAt).toLocaleString(
+                           "en-GB",
+                           { timeZone: "Asia/Dhaka" }
+                         )}`
+                       );
+                     }
+
+                     await forwardUndeliveredDocument({
+                       sock,
+                       userId,
+                       sessionId,
+                       outcome: "DUPLICATE",
+                       buffer: downloadedMediaBuffer,
+                       mediaMeta,
+                       msgType,
+                       senderPhone: sender,
+                       extraLines: duplicateExtraLines,
+                     });
+                   } else {
+                     await recordDeliveryAudit({
+                       userId,
+                       sessionId,
+                       messageId: msg?.key?.id || "",
+                       customerPhone: sender,
+                       outcome: "NO_MATCH",
+                       confidence: 0,
+                       needsReview: true,
+                       details: {
+                         matchedFile: mediaMeta?.fileName || "",
+                         ocrMethod: mediaMeta?.ocrMethod || "NONE",
+                       },
+                     });
+
+                     await forwardUndeliveredDocument({
+                       sock,
+                       userId,
+                       sessionId,
+                       outcome: "NO_MATCH",
+                       buffer: downloadedMediaBuffer,
+                       mediaMeta,
+                       msgType,
+                       senderPhone: sender,
+                     });
+                   }
                  }
                }
              } catch (deliveryErr) {
@@ -1678,10 +1786,11 @@ export async function initSession(userId, sessionId) {
                // nobody. Length cannot tell the two apart — this LID is 15
                // digits, a valid MSISDN length — so rely on the JID itself.
                const senderIsUnresolvedLid = isLidJid && normalizePhone(senderPhone) === normalizePhone(rawNum);
+               await refreshDbVendors(userId, sessionId);
                if (senderIsUnresolvedLid) {
                  console.warn(`[Order] sender ${rawNum} is an unresolved LID - no order created (cannot be delivered to)`);
-               } else if (isVendor(senderPhone)) {
-                 console.log(`[Vendors] ${senderPhone} (${vendorName(senderPhone)}) is a vendor - no order created`);
+               } else if (isVendor(userId, sessionId, senderPhone)) {
+                 console.log(`[Vendors] ${senderPhone} (${vendorName(userId, sessionId, senderPhone)}) is a vendor - no order created`);
                } else {
                  const currentText = [textBody, mediaMeta?.ocrText || ""]
                    .filter(Boolean).join("\n").slice(0, 12000);
@@ -2025,6 +2134,57 @@ export async function getGroupList(userId, sessionId) {
     group.canWrite = !group.announce || isAdmin;
   }
   return groups;
+}
+
+
+/* ───────── CREATE REVIEW GROUP ───────── */
+
+export async function createReviewGroup(
+  userId,
+  sessionId,
+  groupName,
+  participantNumbers = [],
+) {
+  const client = await getClientForMsg(userId, sessionId);
+
+  if (!client?.connected || !client?.sock) {
+    throw new Error("WhatsApp session is not connected");
+  }
+
+  const subject = String(groupName || "").trim();
+
+  if (subject.length < 3 || subject.length > 100) {
+    throw new Error("Group name must be between 3 and 100 characters");
+  }
+
+  const participants = [...new Set(
+    (Array.isArray(participantNumbers) ? participantNumbers : [])
+      .map((number) => cleanNumber(String(number || "")))
+      .filter((number) => number.length >= 10 && number.length <= 15)
+  )];
+
+  if (!participants.length) {
+    throw new Error("At least one valid WhatsApp participant number is required");
+  }
+
+  const participantJids = participants.map(
+    (number) => `${number}@s.whatsapp.net`
+  );
+
+  const metadata = await client.sock.groupCreate(subject, participantJids);
+
+  const groupJid = String(metadata?.id || "").trim();
+
+  if (!groupJid.endsWith("@g.us")) {
+    throw new Error("WhatsApp did not return a valid group JID");
+  }
+
+  return {
+    jid: groupJid,
+    subject: String(metadata?.subject || subject),
+    participants,
+    metadata,
+  };
 }
 
 /* ───────── HELPER: BUILD MEDIA PAYLOAD ───────── */

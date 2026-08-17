@@ -57,3 +57,14 @@ list_and_reset_users.js
 manage_users.js
 seed_plans.js
 find_admin.js
+# WaFastAPI production secrets/runtime
+.env
+.env.*
+!.env.example
+
+# Customer / WhatsApp runtime files
+/public/received_media/
+/tmp/
+
+# Production backups
+*.bak.*

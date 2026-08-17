@@ -38,6 +38,7 @@ import Session from "./models/sessionModel.js";
 import { startCampaignQueue } from "./lib/campaignQueue.js";
 import { initSession, closeAllSessions } from "./lib/whatsapp.js";
 import agentOperationsRouter from "./routers/agentOperationsRouter.js";
+import { n8nSendText } from "./controllers/n8nInternalController.js";
 
 const app = express();
 await connectDB();
@@ -113,6 +114,9 @@ app.use(cookieParser());
 /* ───────── API ───────── */
 app.use("/api/auth", authRouter);
 app.use("/api/session", authenticate, sessionRouter);
+
+// Private server-to-server endpoint for n8n
+app.post("/api/internal/n8n/send/text", n8nSendText);
 app.use("/api/whatsapp", subscriptionMiddleware, whatsappRouter);
 app.use("/api/agent", subscriptionMiddleware, agentOperationsRouter);
 app.use("/api/autoreply", authenticate, autoReplyRouter);

@@ -18,7 +18,7 @@ export async function register(req, res) {
     }
 
     // Validate username
-    const usernameRegex = /^[a-z][a-z0-9_-]*$/;
+    const usernameRegex = /^[A-Za-z][A-Za-z0-9_-]*$/;
     if (!usernameRegex.test(username)) {
       return res.status(400).json({
         error:
