@@ -8,6 +8,8 @@ import {
   getMyInfo as waGetMyInfo,
   logout as waLogout,
   clear as waClear,
+  createReviewGroup as waCreateReviewGroup,
+  getGroupList as waGetGroupList,
 } from "../lib/whatsapp.js";
 import User from "../models/userModel.js";
 import subscriptions from "../json/subscription.js";
@@ -727,6 +729,246 @@ export async function setForwarding(req, res) {
 // Deliberately not behind the Forwarding Bot subscription: this is a safety
 // net for the core delivery flow, not an add-on feature, and leaving it off
 // means undelivered customer documents are silently dropped.
+
+// Create a dedicated WhatsApp review group for this session and automatically
+// save the real WhatsApp group JID as the undelivered-document destination.
+
+// Return all WhatsApp groups available to this authenticated session.
+// Runs inside the existing PM2 WhatsApp process, so it reuses the live socket.
+export async function getReviewGroups(req, res) {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { sessionId } = req.params;
+
+  try {
+    const userId = req.user._id.toString();
+
+    const session = await sessionModel
+      .findOne({
+        _id: sessionId,
+        user: userId,
+      })
+      .lean();
+
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    if (session.status !== "CONNECTED") {
+      return res.status(409).json({
+        error: "WhatsApp session is not connected",
+      });
+    }
+
+    const groups = await waGetGroupList(userId, sessionId);
+
+    const selectedGroupJid =
+      String(session.undeliveredTarget || "").trim();
+
+    const result = Object.values(groups || {})
+      .filter((group) =>
+        String(group?.id || "").endsWith("@g.us")
+      )
+      .map((group) => ({
+        jid: String(group.id),
+        name: String(group.subject || ""),
+        canWrite: !!group.canWrite,
+        myRole: group.myRole || "member",
+        selected:
+          String(group.id) === selectedGroupJid,
+      }));
+
+    return res.status(200).json({
+      success: true,
+      undeliveredEnabled:
+        !!session.undeliveredEnabled,
+      selectedGroupJid,
+      groups: result,
+    });
+  } catch (err) {
+    console.error(
+      `[Review Groups] list failed [Session: ${sessionId}]:`,
+      err.message,
+    );
+
+    return res.status(500).json({
+      error: err.message || "Could not load WhatsApp groups",
+    });
+  }
+}
+
+
+// Select exactly one existing WhatsApp group as the review destination.
+export async function selectReviewGroup(req, res) {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { sessionId } = req.params;
+  const groupJid = String(req.body?.groupJid || "").trim();
+
+  if (!groupJid.endsWith("@g.us")) {
+    return res.status(400).json({
+      error: "A valid WhatsApp group is required",
+    });
+  }
+
+  try {
+    const userId = req.user._id.toString();
+
+    const session = await sessionModel.findOne({
+      _id: sessionId,
+      user: userId,
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        error: "Session not found",
+      });
+    }
+
+    if (session.status !== "CONNECTED") {
+      return res.status(409).json({
+        error: "WhatsApp session is not connected",
+      });
+    }
+
+    // SECURITY:
+    // Do not trust the JID sent by the browser.
+    // Verify it exists in THIS session's live WhatsApp groups.
+    const groups = await waGetGroupList(
+      userId,
+      sessionId
+    );
+
+    const selected = Object.values(groups || {}).find(
+      (group) =>
+        String(group?.id || "") === groupJid
+    );
+
+    if (!selected) {
+      return res.status(400).json({
+        error:
+          "Selected group does not belong to this WhatsApp session",
+      });
+    }
+
+    if (!selected.canWrite) {
+      return res.status(400).json({
+        error:
+          "Connected WhatsApp account cannot write to this group",
+      });
+    }
+
+    session.undeliveredEnabled = true;
+    session.undeliveredTarget =
+      String(selected.id);
+
+    await session.save();
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Review group selected successfully",
+      reviewGroup: {
+        jid: String(selected.id),
+        name: String(selected.subject || ""),
+        canWrite: !!selected.canWrite,
+        myRole: selected.myRole || "member",
+      },
+    });
+  } catch (err) {
+    console.error(
+      `[Review Group] selection failed [Session: ${sessionId}]:`,
+      err.message,
+    );
+
+    return res.status(500).json({
+      error:
+        err.message || "Could not select review group",
+    });
+  }
+}
+
+
+export async function createReviewGroup(req, res) {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { sessionId } = req.params;
+  const { groupName, participants } = req.body || {};
+
+  try {
+    const userId = req.user._id.toString();
+
+    const session = await sessionModel.findOne({
+      _id: sessionId,
+      user: userId,
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    if (session.status !== "CONNECTED") {
+      return res.status(409).json({
+        error: "WhatsApp session must be connected before creating a review group",
+      });
+    }
+
+    const cleanName = String(groupName || "").trim();
+
+    if (cleanName.length < 3 || cleanName.length > 100) {
+      return res.status(400).json({
+        error: "Group name must be between 3 and 100 characters",
+      });
+    }
+
+    if (!Array.isArray(participants) || participants.length < 1) {
+      return res.status(400).json({
+        error: "At least one participant WhatsApp number is required",
+      });
+    }
+
+    const created = await waCreateReviewGroup(
+      userId,
+      sessionId,
+      cleanName,
+      participants,
+    );
+
+    // IMPORTANT:
+    // Save only the JID returned by WhatsApp itself.
+    // Never trust a client-supplied group JID for automatic review routing.
+    session.undeliveredEnabled = true;
+    session.undeliveredTarget = created.jid;
+    await session.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Review group created and configured successfully",
+      reviewGroup: {
+        jid: created.jid,
+        subject: created.subject,
+      },
+      undeliveredEnabled: true,
+      undeliveredTarget: created.jid,
+    });
+  } catch (err) {
+    console.error(
+      `[Review Group] create failed [Session: ${sessionId}]:`,
+      err.message,
+    );
+
+    return res.status(500).json({
+      error: err.message || "Could not create review group",
+    });
+  }
+}
+
 export async function setUndelivered(req, res) {
   if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
@@ -896,15 +1138,25 @@ export async function setVendors(req, res) {
     }
     await session.save();
 
-    // Push straight into the in-memory set so the change applies immediately.
-    const all = await sessionModel.find({ user: req.user._id.toString() }, "vendorNumbers").lean();
-    setDbVendors(all.flatMap((entry) => entry.vendorNumbers || []));
+    // Replace ONLY this tenant/session's runtime vendor set.
+    // An empty array intentionally removes every vendor from this session.
+    const vendorScopeUserId = req.user._id.toString();
+    const vendorScopeSessionId = String(session._id);
+
+    setDbVendors(
+      vendorScopeUserId,
+      vendorScopeSessionId,
+      session.vendorNumbers || []
+    );
 
     return res.status(200).json({
       success: true,
       vendorNumbers: session.vendorNumbers,
       vendorGroupJid: session.vendorGroupJid,
-      activeVendors: [...getVendors()].map(([number, name]) => ({ number, name })),
+      activeVendors: [...getVendors(
+        vendorScopeUserId,
+        vendorScopeSessionId
+      )].map(([number, name]) => ({ number, name })),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -916,6 +1168,18 @@ export async function getVendorConfig(req, res) {
   try {
     const session = await sessionModel.findOne({ _id: req.params.sessionId, user: req.user._id.toString() }).lean();
     if (!session) return res.status(404).json({ error: "Session not found" });
+
+    const vendorScopeUserId = req.user._id.toString();
+    const vendorScopeSessionId = String(session._id);
+
+    // Rehydrate this exact session after a process restart and make the
+    // dashboard's ACTIVE VENDORS reflect only its own DB configuration.
+    setDbVendors(
+      vendorScopeUserId,
+      vendorScopeSessionId,
+      session.vendorNumbers || []
+    );
+
     return res.status(200).json({
       success: true,
       // Included so the dashboard can list the account's groups for the
@@ -923,7 +1187,10 @@ export async function getVendorConfig(req, res) {
       apiKey: session.apiKey || "",
       vendorNumbers: session.vendorNumbers || [],
       vendorGroupJid: session.vendorGroupJid || "",
-      activeVendors: [...getVendors()].map(([number, name]) => ({ number, name })),
+      activeVendors: [...getVendors(
+        vendorScopeUserId,
+        vendorScopeSessionId
+      )].map(([number, name]) => ({ number, name })),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

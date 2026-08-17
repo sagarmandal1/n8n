@@ -21,6 +21,9 @@ import {
   getConversation,
   setForwarding,
   setUndelivered,
+  createReviewGroup,
+  getReviewGroups,
+  selectReviewGroup,
   getForwardingHistory,
   getForwardingStats,
   getDashboardStats,
@@ -63,6 +66,10 @@ sessionRouter.post("/:sessionId/set-fallback", setFallback);
 sessionRouter.post("/:sessionId/set-ai", setAiSettings);
 sessionRouter.post("/:sessionId/set-forwarding", setForwarding);
 sessionRouter.post("/:sessionId/set-undelivered", setUndelivered);
+sessionRouter.post("/:sessionId/review-group/create", createReviewGroup);
+sessionRouter.get("/:sessionId/groups", getReviewGroups);
+sessionRouter.post("/:sessionId/review-group/select", selectReviewGroup);
+
 sessionRouter.post("/:sessionId/set-vendors", setVendors);
 sessionRouter.get("/:sessionId/vendors", getVendorConfig);
 sessionRouter.get("/:sessionId/message-history", setHistory);

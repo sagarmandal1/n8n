@@ -323,6 +323,60 @@ export async function findDynamicOrderMatches({ userId, sessionId, evidenceText,
     status: { $in: ["PENDING", "REVISION", "DELIVERED"] },
   }).sort({ createdAt: 1 });
   const vendor = normalizePhone(vendorPhone);
+
+  // Used only for the DOB-missing fallback. Name-only delivery is allowed
+  // when the OCR did not recover a DOB AND that name identifies exactly one
+  // OPEN customer in this session.
+  const openNameCustomerPhones = new Set(
+    orders
+      .filter((candidateOrder) =>
+        ["PENDING", "REVISION"].includes(candidateOrder.status)
+      )
+      .filter((candidateOrder) =>
+        [candidateOrder.name, candidateOrder.englishName]
+          .filter(Boolean)
+          .some((name) => similar(name, evidence))
+      )
+      .map((candidateOrder) => normalizePhone(candidateOrder.customerPhone))
+      .filter(Boolean)
+  );
+
+  // First/last-name OCR fallback.
+  // Exact normalized tokens only: e.g. "PURNIMA" or "বেগম".
+  // Short noise such as "Md" is intentionally ignored.
+  const nameTokens = (value = "") => (
+    String(value || "")
+      .normalize("NFKC")
+      .toLowerCase()
+      .match(/[a-z\u0980-\u09ff]+/gu) || []
+  ).filter((token) => token.length >= 3);
+
+  const evidenceNameTokens = new Set(nameTokens(evidence));
+
+  const openCustomerPhones = new Set(
+    orders
+      .filter((candidateOrder) =>
+        ["PENDING", "REVISION"].includes(candidateOrder.status)
+      )
+      .map((candidateOrder) => normalizePhone(candidateOrder.customerPhone))
+      .filter(Boolean)
+  );
+
+  const openPartialNameCustomerPhones = new Set(
+    orders
+      .filter((candidateOrder) =>
+        ["PENDING", "REVISION"].includes(candidateOrder.status)
+      )
+      .filter((candidateOrder) =>
+        [candidateOrder.name, candidateOrder.englishName]
+          .filter(Boolean)
+          .flatMap((value) => nameTokens(value))
+          .some((token) => evidenceNameTokens.has(token))
+      )
+      .map((candidateOrder) => normalizePhone(candidateOrder.customerPhone))
+      .filter(Boolean)
+  );
+
   return orders
     .map((order) => {
       // A file from the vendor this order was assigned to is far stronger
@@ -332,6 +386,19 @@ export async function findDynamicOrderMatches({ userId, sessionId, evidenceText,
       const assignedToSender = Boolean(vendor) && normalizePhone(order.assignedVendor || "") === vendor;
       const idMatch = !String(order.applicationId).startsWith("FORM-") && evidenceDigits.includes(String(order.applicationId));
       const nameMatch = [order.name, order.englishName].filter(Boolean).some((name) => similar(name, evidence));
+
+      const partialNameTokens = [
+        ...new Set(
+          [order.name, order.englishName]
+            .filter(Boolean)
+            .flatMap((value) => nameTokens(value))
+            .filter((token) => evidenceNameTokens.has(token))
+        ),
+      ];
+
+      // Full-name matching remains stronger. This flag is specifically for
+      // OCR cases where only a first OR last name survived.
+      const partialNameMatch = !nameMatch && partialNameTokens.length > 0;
       // A date of birth present on both sides that disagrees proves this is a
       // different person, exactly like a gender clash.
       const evidenceDob = parseWrittenDate(evidence) || firstMatch(evidence, [
@@ -369,6 +436,7 @@ export async function findDynamicOrderMatches({ userId, sessionId, evidenceText,
       const matchedFields = [
         idMatch && "applicationId",
         nameMatch && "name",
+        partialNameMatch && "partialName",
         dobMatch && "dob",
         genderMatch && "gender",
         // The assignment counts as an independent field: it is evidence from
@@ -381,6 +449,43 @@ export async function findDynamicOrderMatches({ userId, sessionId, evidenceText,
         addressMatch && "address",
         birthRegistrationMatch && "birthRegistrationNumber",
       ].filter(Boolean);
+
+      // FALLBACK RULE:
+      // 1. Name + DOB remains the preferred identification.
+      // 2. If NO parseable DOB was recovered from the vendor file, a name alone
+      //    may identify the recipient ONLY when it points to exactly one OPEN
+      //    customer in this session.
+      // 3. If a DOB was recovered and conflicts, dobConflict rejects the file.
+      const uniqueNameFallback = Boolean(
+        nameMatch &&
+        !normalizedEvidenceDob &&
+        ["PENDING", "REVISION"].includes(order.status) &&
+        openNameCustomerPhones.size === 1 &&
+        openNameCustomerPhones.has(normalizePhone(order.customerPhone))
+      );
+
+      // FIRST/LAST-NAME FALLBACK:
+      //
+      // A partial name may auto-deliver only when it resolves to ONE open
+      // customer. If there are multiple open customers overall, the order must
+      // also be assigned to the sender vendor. This prevents a common surname
+      // such as Begum/Islam/Akter from routing to an unrelated customer.
+      //
+      // If OCR recovered a DOB, that DOB must match. A contradictory DOB can
+      // never be overridden by a partial name.
+      const partialScopeSafe = Boolean(
+        openCustomerPhones.size === 1 || assignedToSender
+      );
+
+      const uniquePartialNameFallback = Boolean(
+        partialNameMatch &&
+        openPartialNameCustomerPhones.size === 1 &&
+        openPartialNameCustomerPhones.has(normalizePhone(order.customerPhone)) &&
+        partialScopeSafe &&
+        (!normalizedEvidenceDob || dobMatch)
+      );
+
+
       // A completed order must never outrank outstanding work. The penalty
       // exceeds any achievable positive score, so a delivered order can only
       // come first when no open order matched at all.
@@ -390,30 +495,55 @@ export async function findDynamicOrderMatches({ userId, sessionId, evidenceText,
         0.99,
         0.5 + matchedFields.length * 0.15 + (idMatch ? 0.08 : 0) + (birthRegistrationMatch ? 0.04 : 0),
       );
-      return { order, score, confidence, matchedFields, genderConflict, dobConflict, nameMatch, assignedToSender };
+      const matchMode =
+        nameMatch && dobMatch
+          ? "NAME_DOB"
+          : uniqueNameFallback
+            ? "UNIQUE_NAME_FALLBACK"
+            : uniquePartialNameFallback && dobMatch
+              ? "PARTIAL_NAME_DOB"
+              : uniquePartialNameFallback
+                ? "UNIQUE_PARTIAL_NAME_FALLBACK"
+                : "";
+
+      return {
+        order,
+        score,
+        confidence,
+        matchedFields,
+        genderConflict,
+        dobConflict,
+        nameMatch,
+        partialNameMatch,
+        partialNameTokens,
+        assignedToSender,
+        uniqueNameFallback,
+        uniquePartialNameFallback,
+        matchMode,
+      };
     })
       .filter((result) => !result.genderConflict)
       .filter((result) => !result.dobConflict)
-      // The name must agree, so a vendor's file cannot reach a stranger who
-      // merely shares a father's name and a district address. Three identifiers
-      // stand in for it:
+
+      // AUTO-DELIVERY SAFETY RULE:
+      // The person's NAME and DATE OF BIRTH must BOTH agree.
       //
-      //  - a verified application or birth-registration number, both unique;
-      //  - an exact date of birth together with gender.
+      // Application ID, birth-registration number, gender, vendor assignment,
+      // parents' names and address are supporting evidence only. None of them
+      // can replace either name or DOB for automatic customer delivery.
       //
-      // The last exists because names routinely cannot match across scripts:
-      // customers write in Bangla, certificates are issued in English, and OCR
-      // mangles the Bangla half of a bilingual document ("মেহেদী রহমান" comes
-      // back as "মে হেদী রহেমোন"). A date of birth is script-independent, and
-      // should two customers share one, the tie check downstream refuses the
-      // delivery rather than guessing.
-      .filter((result) => result.nameMatch
-        || result.matchedFields.includes("applicationId")
-        || result.matchedFields.includes("birthRegistrationNumber")
-        || (result.matchedFields.includes("dob") && result.matchedFields.includes("gender")))
-      .filter((result) => result.matchedFields.length >= 2 || (
-        filenameExact && (result.matchedFields.includes("applicationId") || result.matchedFields.includes("birthRegistrationNumber"))
-      ))
+      // If OCR cannot recover both required fields, the document fails closed
+      // and is routed to the configured Review / Unmatched group.
+      .filter((result) =>
+        (
+          result.nameMatch &&
+          (
+            result.matchedFields.includes("dob") ||
+            result.uniqueNameFallback
+          )
+        ) ||
+        result.uniquePartialNameFallback
+      )
     .sort((a, b) => b.score - a.score);
 }
 
@@ -425,7 +555,7 @@ export async function assessDynamicOrderMatch({ userId, sessionId, evidenceText 
       autoDeliver: false,
       needsReview: true,
       confidence: 0,
-      reason: "At least two independent fields did not match any pending order",
+      reason: "Name/DOB, unique full name, or a safe unique first/last-name token did not identify one open customer",
       match: null,
       alternatives: [],
     };
@@ -454,7 +584,13 @@ export async function assessDynamicOrderMatch({ userId, sessionId, evidenceText 
     autoDeliver: true,
     needsReview: false,
     confidence: best.confidence,
-    reason: `${best.matchedFields.length} independent fields matched one pending order`,
+    reason: best.matchMode === "UNIQUE_PARTIAL_NAME_FALLBACK"
+      ? "DOB was not readable; one first/last-name token safely identified exactly one open customer"
+      : best.matchMode === "PARTIAL_NAME_DOB"
+        ? "A first/last-name token and date of birth identified one customer"
+        : best.matchMode === "UNIQUE_NAME_FALLBACK"
+          ? "DOB was not readable; the full name identified exactly one open customer"
+          : "Full name and date of birth matched one customer",
     match: best,
     alternatives: matches.slice(1, 4),
   };

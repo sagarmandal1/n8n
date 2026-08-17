@@ -50,8 +50,18 @@ export async function dispatchWebhook(sessionId, eventType, data = {}) {
             .findById(sessionId)
             .select("webhookUrl user +webhookSecret");
 
-        if (!session || !session.webhookUrl) {
-            console.log(`No webhook configured for session ${sessionId}`);
+        if (!session) {
+            console.log(`Session not found for webhook dispatch: ${sessionId}`);
+            return;
+        }
+
+        // Core n8n automation is global and must never depend on a
+        // customer/session-specific webhook URL.
+        const configuredN8nUrl = process.env.N8N_WEBHOOK_URL?.trim();
+        const targetWebhookUrl = configuredN8nUrl || session.webhookUrl;
+
+        if (!targetWebhookUrl) {
+            console.log(`No webhook target configured for session ${sessionId}`);
             return;
         }
 
@@ -65,10 +75,21 @@ export async function dispatchWebhook(sessionId, eventType, data = {}) {
         };
         eventId = payload.id;
 
-        const webhookUrl = await assertSafeWebhookUrl(session.webhookUrl);
-        const secret = session.webhookSecret || process.env.WEBHOOK_SECRET;
+        const webhookUrl = await assertSafeWebhookUrl(targetWebhookUrl);
+
+        // When the global n8n endpoint is configured, every session uses
+        // the same server-to-server n8n secret.
+        const isN8nWebhook = Boolean(configuredN8nUrl);
+        const secret = isN8nWebhook
+            ? process.env.N8N_WEBHOOK_SECRET
+            : (session.webhookSecret || process.env.WEBHOOK_SECRET);
+
         if (!secret) {
-            throw new Error("Webhook signing secret is not configured");
+            throw new Error(
+                isN8nWebhook
+                    ? "N8N_WEBHOOK_SECRET is not configured"
+                    : "Webhook signing secret is not configured"
+            );
         }
 
         await WebhookDelivery.create({
