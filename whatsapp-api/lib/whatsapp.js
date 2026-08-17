@@ -10,7 +10,7 @@ import {
   DisconnectReason,
   Browsers,
   downloadMediaMessage,
-  fetchLatestBaileysVersion,
+  fetchLatestWaWebVersion,
 } from "@whiskeysockets/baileys";
 import sessionModel from "../models/sessionModel.js"; // ← DB
 import User from "../models/userModel.js";
@@ -23,7 +23,7 @@ import {
   createOrdersFromCustomerMessage,
   processAgentDocumentMessage,
 } from "./signcopy/workflow.js";
-import { extractAudioText, extractPdfText, extractImageText } from "./signcopy/documentProcessor.js";
+import { extractAudioText, extractPdfText, extractImageText, extractImageTextEasyOcr } from "./signcopy/documentProcessor.js";
 import DynamicOrder from "../models/dynamicOrderModel.js";
 import AgentCustomerProfile from "../models/agentCustomerProfileModel.js";
 import LidMap from "../models/lidMapModel.js";
@@ -49,6 +49,83 @@ const clients = {};
 // re-verified against the database after the hold, so a correction the customer
 // sends in the meantime is respected instead of being overtaken by the send.
 const DELIVERY_HOLD_MS = 15000;
+
+
+function normalizeOcrDigits(value = "") {
+  const bangla = "০১২৩৪৫৬৭৮৯";
+
+  return String(value || "").replace(
+    /[০-৯]/gu,
+    (digit) => String(bangla.indexOf(digit)),
+  );
+}
+
+function normalizeOcrDate(value = "") {
+  const normalized = normalizeOcrDigits(value)
+    .replace(/[.-]/gu, "/")
+    .trim();
+
+  const parts = normalized.split("/");
+
+  if (parts.length !== 3) return "";
+
+  const day = Number(parts[0]);
+  const month = Number(parts[1]);
+  const year = Number(parts[2]);
+
+  if (
+    !Number.isInteger(day)
+    || !Number.isInteger(month)
+    || !Number.isInteger(year)
+    || day < 1
+    || day > 31
+    || month < 1
+    || month > 12
+    || year < 1800
+    || year > 2100
+  ) {
+    return "";
+  }
+
+  return [
+    String(day).padStart(2, "0"),
+    String(month).padStart(2, "0"),
+    String(year),
+  ].join("/");
+}
+
+function extractOcrDobCandidates(text = "") {
+  const normalized = normalizeOcrDigits(text);
+  const labeled = new Set();
+
+  const labeledRegex =
+    /(?:date\s*of\s*birth|dob|birth\s*date|জন্ম\s*তারিখ|জন্মতারিখ)\s*[:：ঃ\-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/giu;
+
+  let match;
+
+  while ((match = labeledRegex.exec(normalized)) !== null) {
+    const value = normalizeOcrDate(match[1]);
+    if (value) labeled.add(value);
+  }
+
+  if (labeled.size) {
+    return [...labeled];
+  }
+
+  // Some OCR engines detect the DOB value perfectly but lose its label.
+  // Only trust an unlabeled date here when exactly ONE date-like value
+  // exists in that engine's OCR output.
+  const all = new Set();
+  const dateRegex =
+    /\b(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})\b/gu;
+
+  while ((match = dateRegex.exec(normalized)) !== null) {
+    const value = normalizeOcrDate(match[1]);
+    if (value) all.add(value);
+  }
+
+  return all.size === 1 ? [...all] : [];
+}
 
 // WhatsApp group replies often carry the original customer/order details in
 // contextInfo. Include that quoted content in matching so a seller's file can
@@ -76,13 +153,27 @@ export async function backfillLidIdentity(lid, phone, sessionId = null) {
 
   const results = { messages: 0, orders: 0, merged: 0, audits: 0 };
 
-  const msgs = await Message.updateMany({ fromNumber: lidNum }, { $set: { fromNumber: realPhone } });
+  if (!sessionId) {
+    throw new Error("backfillLidIdentity requires sessionId");
+  }
+
+  // LID values are only meaningful inside the WhatsApp session that learned
+  // the mapping. Never rewrite another customer's/session's records.
+  const identityScope = { session: sessionId };
+
+  const msgs = await Message.updateMany(
+    { ...identityScope, fromNumber: lidNum },
+    { $set: { fromNumber: realPhone } },
+  );
   results.messages = msgs.modifiedCount || 0;
 
   // DynamicOrder has a unique index on {user, session, customerPhone,
   // applicationId}, so a blind update collides whenever the phone-keyed twin
   // already exists. Drop the LID copy in that case, otherwise re-key it.
-  for (const stale of await DynamicOrder.find({ customerPhone: lidNum })) {
+  for (const stale of await DynamicOrder.find({
+    ...identityScope,
+    customerPhone: lidNum,
+  })) {
     const twin = await DynamicOrder.findOne({
       user: stale.user,
       session: stale.session,
@@ -99,7 +190,10 @@ export async function backfillLidIdentity(lid, phone, sessionId = null) {
     }
   }
 
-  const audits = await AgentAudit.updateMany({ customerPhone: lidNum }, { $set: { customerPhone: realPhone } });
+  const audits = await AgentAudit.updateMany(
+    { ...identityScope, customerPhone: lidNum },
+    { $set: { customerPhone: realPhone } },
+  );
   results.audits = audits.modifiedCount || 0;
 
   if (results.messages || results.orders || results.merged || results.audits) {
@@ -503,14 +597,22 @@ export async function initSession(userId, sessionId) {
     const readyDef = deferred();
     const qrDef = deferred();
 
-    let waVersion = [2, 3000, 1035194821];
+    // Prefer the live WhatsApp Web version for new-device pairing.
+    // The Baileys bundled/version endpoint can return a stale protocol version.
+    let waVersion = [2, 3000, 1045333625];
     try {
-      const { version } = await fetchLatestBaileysVersion();
-      if (Array.isArray(version)) {
+      const { version, isLatest } = await fetchLatestWaWebVersion();
+      if (Array.isArray(version) && version.length === 3) {
         waVersion = version;
       }
+      console.log(
+        `[Baileys] Using WA Web version ${waVersion.join(".")} (latest=${isLatest})`
+      );
     } catch (err) {
-      console.error("[Baileys] Failed to fetch latest version, using fallback:", err.message);
+      console.error(
+        `[Baileys] WA Web version fetch failed; using verified fallback ${waVersion.join(".")}:`,
+        err.message
+      );
     }
 
     const sock = makeWASocket({
@@ -560,24 +662,21 @@ export async function initSession(userId, sessionId) {
             const lid = c.lid.replace(/@lid$/i, "");
             if (realPhone && lid && realPhone !== lid) {
               lidPhoneMap[lid] = realPhone;
-              await Message.updateMany({ fromNumber: lid }, { $set: { fromNumber: realPhone } })
-                .catch(err => console.error("[LID Backfill]", err.message));
+              await backfillLidIdentity(lid, realPhone, sessionId);
               console.log(`[LID Resolved] ${lid} → ${realPhone}`);
             }
           } else if (isLid && c.jid) {
             realPhone = c.jid.replace(/@s\.whatsapp\.net$/i, "");
             if (realPhone && lidNum && realPhone !== lidNum) {
               lidPhoneMap[lidNum] = realPhone;
-              await Message.updateMany({ fromNumber: lidNum }, { $set: { fromNumber: realPhone } })
-                .catch(err => console.error("[LID Backfill]", err.message));
+              await backfillLidIdentity(lidNum, realPhone, sessionId);
               console.log(`[LID Resolved] ${lidNum} → ${realPhone}`);
             }
           } else if (isLid && c.phoneNumber) {
             realPhone = c.phoneNumber.replace(/\D/g, "");
             if (realPhone && lidNum && realPhone !== lidNum) {
               lidPhoneMap[lidNum] = realPhone;
-              await Message.updateMany({ fromNumber: lidNum }, { $set: { fromNumber: realPhone } })
-                .catch(err => console.error("[LID Backfill]", err.message));
+              await backfillLidIdentity(lidNum, realPhone, sessionId);
               console.log(`[LID Resolved] ${lidNum} → ${realPhone}`);
             }
           }
@@ -607,13 +706,8 @@ export async function initSession(userId, sessionId) {
       }
       if (realPhone && lidNum && realPhone !== lidNum && !lidPhoneMap[lidNum]) {
         lidPhoneMap[lidNum] = realPhone;
-        const updated = await Message.updateMany(
-          { fromNumber: lidNum },
-          { $set: { fromNumber: realPhone } }
-        ).catch(err => console.error("[LID Backfill] DB error:", err.message));
-        if (updated?.modifiedCount > 0) {
-          console.log(`[LID Resolved] ${lidNum} → ${realPhone} (${updated.modifiedCount} messages updated)`);
-        }
+        await backfillLidIdentity(lidNum, realPhone, sessionId);
+        console.log(`[LID Resolved] ${lidNum} → ${realPhone}`);
       }
     }
 
@@ -652,7 +746,7 @@ export async function initSession(userId, sessionId) {
         console.error(`🔴 WhatsApp Disconnected [Session: ${sessionId}]:`, error?.message || "Unknown Error", "Code:", code);
 
         // Logged out manually or account banned/unauthorized
-        if (code === DisconnectReason.loggedOut || code === 401 || code === 403 || code === 405) {
+        if (code === DisconnectReason.loggedOut || code === 401 || code === 403) {
           console.log(`🚫 Session ${sessionId} logged out or unauthorized. Deleting session.`);
           await sessionModel.findByIdAndUpdate(sessionId, { status: "LOGGED_OUT" });
           onLoggedOut(sessionId).catch(err => console.error(`[Webhook Error] session.logged_out [Session: ${sessionId}]:`, err.message));
@@ -897,8 +991,7 @@ export async function initSession(userId, sessionId) {
                 lidPhoneMap[rawNum] = realPhone;
                 senderPhone = realPhone;
                 // Re-key messages, orders and audits that stored the LID
-                backfillLidIdentity(rawNum, realPhone, sessionId)
-                  .catch(err => console.error("[LID→Phone DB]", err.message));
+                await backfillLidIdentity(rawNum, realPhone, sessionId);
               }
             }
           }
@@ -932,8 +1025,7 @@ export async function initSession(userId, sessionId) {
               if (realPhone && realPhone !== rawNum) {
                 lidPhoneMap[rawNum] = realPhone;
                 senderPhone = realPhone;
-                backfillLidIdentity(rawNum, realPhone, sessionId)
-                  .catch((err) => console.error("[LID→Phone DB]", err.message));
+                await backfillLidIdentity(rawNum, realPhone, sessionId);
               }
             } catch (err) {
               console.error(`[LID→Phone lookup] ${rawNum}:`, err.message);
@@ -1090,7 +1182,7 @@ export async function initSession(userId, sessionId) {
                // does a substring check on digits, so a shorter application ID
                // sitting anywhere inside such a timestamp would match a customer
                // who has nothing to do with the file.
-               const searchable = [
+               let searchable = [
                  mediaMeta?.ocrText || "",
                  extractMessageText(actualMessage),
                ].join(" ");
@@ -1134,6 +1226,7 @@ export async function initSession(userId, sessionId) {
                    },
                  });
                } else if (mediaMatch && senderIsVendor && (mediaMeta?.ocrText || mediaMeta?.fileName || chatJid.endsWith("@g.us"))) {
+                 let ocrIdentityConflict = null;
                  let matches = await findDynamicOrderMatches({ userId, sessionId, evidenceText: searchable, filenameExact, vendorPhone: senderPhone, revisionDone });
                  let match = matches[0];
                  // Backfill recent order messages so an order received during a
@@ -1172,12 +1265,106 @@ export async function initSession(userId, sessionId) {
                    match = matches[0];
                  }
 
+                 // Existing OCR did not produce a safe match.
+                 // Run the heavier EasyOCR engine only now.
+                 if (
+                   !match
+                   && savedMediaPath
+                   && (
+                     msgType === "imageMessage"
+                     || String(mediaMeta?.mimeType || "").startsWith("image/")
+                     || /\.(jpe?g|png|webp|heic|heif|bmp|tiff?|gif)$/iu.test(
+                       String(mediaMeta?.fileName || "")
+                     )
+                   )
+                 ) {
+                   console.log(
+                     `[EasyOCR Fallback] no safe primary OCR match; trying EasyOCR for ${mediaMeta?.fileName || "image"}`
+                   );
+
+                   const easyExtraction = await extractImageTextEasyOcr(savedMediaPath);
+                   const easyText = String(easyExtraction?.text || "").trim();
+
+                   if (easyText) {
+                     const primaryDobs = extractOcrDobCandidates(
+                       mediaMeta?.ocrText || ""
+                     );
+
+                     const easyDobs = extractOcrDobCandidates(easyText);
+
+                     const dobAgreement =
+                       !primaryDobs.length
+                       || !easyDobs.length
+                       || primaryDobs.some((dob) => easyDobs.includes(dob));
+
+                     if (!dobAgreement) {
+                       ocrIdentityConflict = {
+                         primaryDobs,
+                         easyDobs,
+                       };
+
+                       matches = [];
+                       match = null;
+
+                       console.warn(
+                         `[EasyOCR Fallback] DOB conflict - primary=${primaryDobs.join(",")} easyocr=${easyDobs.join(",")} - refusing auto-delivery`
+                       );
+                     } else {
+                       searchable = [
+                         searchable,
+                         easyText,
+                       ]
+                         .filter(Boolean)
+                         .join("\n");
+
+                       mediaMeta.ocrText = [
+                         mediaMeta?.ocrText || "",
+                         easyText,
+                       ]
+                         .filter(Boolean)
+                         .join("\n");
+
+                       mediaMeta.ocrMethod = [
+                         mediaMeta?.ocrMethod || "OCR",
+                         "EASYOCR",
+                       ]
+                         .filter(Boolean)
+                         .join("+");
+
+                       matches = await findDynamicOrderMatches({
+                         userId,
+                         sessionId,
+                         evidenceText: searchable,
+                         filenameExact,
+                         vendorPhone: senderPhone,
+                         revisionDone,
+                       });
+
+                       match = matches[0];
+
+                       if (match) {
+                         console.log(
+                           `[EasyOCR Fallback] safe match found: ${match.order.applicationId}`
+                         );
+                       } else {
+                         console.log(
+                           "[EasyOCR Fallback] EasyOCR completed but no safe match found"
+                         );
+                       }
+                     }
+                   } else {
+                     console.warn(
+                       `[EasyOCR Fallback] unavailable/no text: ${easyExtraction?.error || "unknown error"}`
+                     );
+                   }
+                 }
+
                  // A group delivery usually follows a task message that we
                  // sent to that same group. The certificate photo may contain
                  // only a name/DOB, while the sent task contains the
                  // Application ID and full customer details. Match each task
                  // separately so unrelated group jobs cannot be combined.
-                 if (!match) {
+                 if (!match && !ocrIdentityConflict) {
                    const taskFilter = {
                      user: userId,
                      session: sessionId,
@@ -1219,7 +1406,7 @@ export async function initSession(userId, sessionId) {
                  // pushes deliverable work into the review group. Done here,
                  // ahead of the decision chain, so a late match is handled by
                  // the normal delivery path rather than a second copy of it.
-                 if (!match) {
+                 if (!match && !ocrIdentityConflict) {
                    await new Promise((resolve) => setTimeout(resolve, DELIVERY_HOLD_MS));
                    const retry = await findDynamicOrderMatches({ userId, sessionId, evidenceText: searchable, filenameExact, vendorPhone: senderPhone, revisionDone });
                    if (retry.length) {
@@ -1580,6 +1767,11 @@ export async function initSession(userId, sessionId) {
                        details: {
                          matchedFile: mediaMeta?.fileName || "",
                          ocrMethod: mediaMeta?.ocrMethod || "NONE",
+                         reason: ocrIdentityConflict
+                           ? "OCR engines disagree on DOB"
+                           : "no safe customer match after OCR fallbacks",
+                         primaryDobs: ocrIdentityConflict?.primaryDobs || [],
+                         easyOcrDobs: ocrIdentityConflict?.easyDobs || [],
                        },
                      });
 
@@ -1592,6 +1784,11 @@ export async function initSession(userId, sessionId) {
                        mediaMeta,
                        msgType,
                        senderPhone: sender,
+                       extraLines: ocrIdentityConflict
+                         ? [
+                             `OCR DOB conflict: primary=${ocrIdentityConflict.primaryDobs.join(", ") || "unknown"} | EasyOCR=${ocrIdentityConflict.easyDobs.join(", ") || "unknown"}`,
+                           ]
+                         : [],
                      });
                    }
                  }
