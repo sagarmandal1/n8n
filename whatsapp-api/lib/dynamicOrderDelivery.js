@@ -324,6 +324,53 @@ function buildCanonicalOrderDob(day, month, year) {
   );
 }
 
+// Labels that specifically denote a date of BIRTH.
+//
+// A government certificate carries several dates — Date of Registration, Date
+// of Issuance, Date of Death — and a whole-text scan returns whichever appears
+// first. On a Bangladeshi birth certificate that is normally the registration
+// date, so the order was stored with the wrong date of birth: not a missing
+// value that would push the file to review, but a confident wrong one that
+// poisons both the NAME_DOB match mode and the dob-conflict filter.
+//
+// Reading the labelled field first fixes that. The generic scan stays as a
+// fallback for documents whose label OCR did not survive.
+const DOB_LABEL = "(?:date\\s*of\\s*birth|birth\\s*date|\\bdob\\b|জন্ম\\s*তারিখ|জন্মতারিখ)";
+// Bounded on purpose: enough for ": " or a single line break between label and
+// value, not enough to reach a date further down the page.
+const DOB_LABEL_GAP = "[\\s:：ঃ\\-–—=]{0,6}";
+
+export function extractLabeledDob(input = "") {
+  const text = normalizeDigits(String(input || "")).normalize("NFKC");
+  if (!text) return "";
+
+  // 22/09/2001, 2001-09-22, 22.09.2001
+  const numeric = text.match(new RegExp(
+    `${DOB_LABEL}${DOB_LABEL_GAP}(\\d{1,4}\\s*[\\/.-]\\s*\\d{1,2}\\s*[\\/.-]\\s*\\d{1,4})`,
+    "iu",
+  ));
+  if (numeric) {
+    const value = normalizeOrderDob(numeric[1]);
+    if (value) return value;
+  }
+
+  // 22 September 2001 / ২২ সেপ্টেম্বর ২০০১
+  const names = Object.keys(MONTH_NAMES).sort((a, b) => b.length - a.length).join("|");
+  const written = text.match(new RegExp(
+    `${DOB_LABEL}${DOB_LABEL_GAP}(\\d{1,2})(?:st|nd|rd|th)?\\s*[\\s,.-]\\s*(${names})\\s*[\\s,.-]\\s*(\\d{4})`,
+    "iu",
+  ));
+  if (written) {
+    const month = MONTH_NAMES[String(written[2]).toLowerCase()];
+    if (month) {
+      const value = buildCanonicalOrderDob(written[1], month, written[3]);
+      if (value) return value;
+    }
+  }
+
+  return "";
+}
+
 export function normalizeOrderDob(value = "") {
   const text = normalizeDigits(String(value || ""))
     .normalize("NFKC")
@@ -472,6 +519,7 @@ export function parseOrderDetails(input = "") {
     /(?:office\s*address|permanent\s*address|স্থায়ী\s*ঠিকানা|ঠিকানা|গ্রাম)\s*[:：ঃ\-]?\s*([^\n\r]+)/iu,
   ]);
   const normalizedDob =
+    extractLabeledDob(text) ||
     normalizeOrderDob(text) ||
     (
       dob
@@ -795,6 +843,7 @@ export async function findDynamicOrderMatches({ userId, sessionId, evidenceText,
   };
 
   const cascadeEvidenceDob =
+    extractLabeledDob(evidence) ||
     parseWrittenDate(evidence) ||
     firstMatch(evidence, [
       /(?:date\s*of\s*birth|dob|জন্ম\s*তারিখ)\s*[:：ঃ\-]?\s*([০-৯\d]{1,2}[\/.-][০-৯\d]{1,2}[\/.-][০-৯\d]{4})/iu,
@@ -911,7 +960,7 @@ export async function findDynamicOrderMatches({ userId, sessionId, evidenceText,
       const dobDayMonthMatch = dayMonthMatches(order);
       // A date of birth present on both sides that disagrees proves this is a
       // different person, exactly like a gender clash.
-      const evidenceDob = normalizeOrderDob(evidence) || parseWrittenDate(evidence) || firstMatch(evidence, [
+      const evidenceDob = extractLabeledDob(evidence) || normalizeOrderDob(evidence) || parseWrittenDate(evidence) || firstMatch(evidence, [
         /(?:date\s*of\s*birth|dob|জন্ম\s*তারিখ)\s*[:：ঃ\-]?\s*([০-৯\d]{1,2}[\/.-][০-৯\d]{1,2}[\/.-][০-৯\d]{4})/iu,
       ]).replace(/-/g, "/").replace(/\./g, "/");
       const normalizedEvidenceDob = normalizeDigits(evidenceDob);
