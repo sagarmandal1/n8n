@@ -20,7 +20,7 @@ import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 
-def variants(source: Image.Image):
+def variants(source: Image.Image, fast=False):
     source = ImageOps.exif_transpose(source).convert("RGB")
     image = source.convert("L")
     # 3500 keeps a 300-dpi A4/Letter page (2550x3300) at native size. The old
@@ -28,7 +28,9 @@ def variants(source: Image.Image):
     # reads 1994-03-11 at full size and 1994-83-11 after the shrink. The cap
     # still bounds memory for large phone photos; a full-size page costs ~0.4s
     # per Tesseract pass against a 4s timeout, so there is ample headroom.
-    image.thumbnail((3500, 3500), Image.Resampling.LANCZOS)
+    # Fast API mode uses a smaller working image so Tesseract does not spend
+    # several seconds on every oversized phone/screen photo.
+    image.thumbnail((1400, 1400) if fast else (3500, 3500), Image.Resampling.LANCZOS)
     if max(image.size) < 1600:
         scale = min(2.5, 1600 / max(image.size))
         image = image.resize((round(image.width * scale), round(image.height * scale)), Image.Resampling.LANCZOS)
@@ -45,6 +47,18 @@ def variants(source: Image.Image):
     sharp = denoised.filter(ImageFilter.UnsharpMask(radius=1.4, percent=170, threshold=3))
     contrast = ImageOps.autocontrast(sharp, cutoff=(1, 1))
     yield "gray", contrast
+
+    if fast:
+        # The API test endpoint prioritizes latency. Blue-channel text is often
+        # the cleanest channel in monitor photos; three focused passes are
+        # enough to recover BRN/DOB/name without the full multi-pass scan.
+        fast_source = source.copy()
+        fast_source.thumbnail((1400, 1400), Image.Resampling.LANCZOS)
+        blue = fast_source.getchannel(2).filter(ImageFilter.MedianFilter(size=3))
+        blue = ImageOps.autocontrast(blue, cutoff=(1, 1))
+        blue = blue.filter(ImageFilter.UnsharpMask(radius=1.1, percent=150, threshold=3))
+        yield "blue", blue
+        return
 
     # Adaptive-ish local threshold: divide the image into horizontal bands so
     # shadows on one part of a page do not erase text elsewhere.
@@ -87,8 +101,36 @@ def variants(source: Image.Image):
         crop = crop.filter(ImageFilter.UnsharpMask(radius=1.2, percent=170, threshold=3))
         yield name, crop
 
+    # Focused English-name region for Bangladesh birth-registration
+    # screenshots / monitor photos. This recovered "Eva Akter" from a
+    # production sample where whole-frame OCR missed the name.
+    src_width, src_height = source.size
+    name_box = (
+        round(src_width * 0.42),
+        round(src_height * 0.50),
+        src_width,
+        round(src_height * 0.84),
+    )
+    name_region = source.crop(name_box)
 
-def run_tesseract(image_path: Path, psm: int):
+    for index, channel_name in (
+        (0, "field-name-right-red"),
+        (1, "field-name-right-green"),
+    ):
+        crop = name_region.getchannel(index)
+        crop = crop.resize(
+            (crop.width * 3, crop.height * 3),
+            Image.Resampling.LANCZOS,
+        )
+        crop = crop.filter(ImageFilter.MedianFilter(size=3))
+        crop = ImageOps.autocontrast(crop, cutoff=(1, 1))
+        crop = crop.filter(
+            ImageFilter.UnsharpMask(radius=1.2, percent=170, threshold=3)
+        )
+        yield channel_name, crop
+
+
+def run_tesseract(image_path: Path, psm: int, timeout=4):
     command = [
         "tesseract", str(image_path), "stdout", "-l", "eng+ben",
         "--psm", str(psm), "-c", "preserve_interword_spaces=1",
@@ -98,7 +140,7 @@ def run_tesseract(image_path: Path, psm: int):
         process = subprocess.Popen(command, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, text=True,
                                    start_new_session=True)
-        stdout, _ = process.communicate(timeout=4)
+        stdout, _ = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         if process is not None:
             try:
@@ -148,10 +190,11 @@ def is_competing_reading(line: str, existing: list) -> bool:
 
 
 def main():
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in (2, 3):
         print(json.dumps({"text": "", "error": "image path required"}))
         return 2
     image_path = Path(sys.argv[1])
+    fast = len(sys.argv) == 3 and sys.argv[2] == "--fast"
     try:
         source = Image.open(image_path)
     except Exception as exc:
@@ -160,14 +203,14 @@ def main():
 
     candidates = []
     with tempfile.TemporaryDirectory(prefix="local-ocr-") as work:
-        for name, image in variants(source):
+        for name, image in variants(source, fast=fast):
             target = Path(work) / f"{name}.png"
             image.save(target, format="PNG", optimize=True)
             # Cropped field bands are already layout-constrained; one focused
             # pass avoids spending the full timeout on redundant page modes.
-            psm_values = (6,) if name.startswith("field-") else (6, 11)
+            psm_values = (6,) if fast or name.startswith("field-") else (6, 11)
             for psm in psm_values:
-                text, score = run_tesseract(target, psm)
+                text, score = run_tesseract(target, psm, timeout=8 if fast else 4)
                 if text:
                     candidates.append((score, text, name, psm))
 
