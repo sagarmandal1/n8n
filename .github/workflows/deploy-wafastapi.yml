@@ -177,15 +177,28 @@ jobs:
             # ---------------------------------------------------------------
             sleep 8
 
+            # pm2 prints advisory banners on STDOUT ahead of the JSON when the
+            # in-memory daemon is older than the installed CLI:
+            #
+            #   >>>> In-memory PM2 is out-of-date, do:
+            #   >>>> $ pm2 update
+            #   [{"pid":...
+            #
+            # Parsing the raw stream then throws, the status reads "missing",
+            # and a healthy deploy gets rolled back. Start at the first bracket
+            # instead of trusting the stream to begin with one.
             STATUS=$(pm2 jlist | node -e '
               let raw = "";
               process.stdin.on("data", (c) => { raw += c; });
               process.stdin.on("end", () => {
                 const name = process.argv[1];
                 let list = [];
-                try { list = JSON.parse(raw); } catch (_) {}
-                const proc = list.find((p) => p.name === name);
-                process.stdout.write(proc ? String(proc.pm2_env.status) : "missing");
+                const start = raw.indexOf("[");
+                if (start >= 0) {
+                  try { list = JSON.parse(raw.slice(start)); } catch (_) {}
+                }
+                const proc = Array.isArray(list) ? list.find((p) => p && p.name === name) : null;
+                process.stdout.write(proc && proc.pm2_env ? String(proc.pm2_env.status) : "missing");
               });
             ' "$APP_PROCESS")
             echo "pm2 status: $STATUS"
