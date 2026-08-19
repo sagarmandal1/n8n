@@ -610,13 +610,42 @@ export async function upsertDynamicOrder({ userId, sessionId, customerPhone, tex
     }
     return existing;
   }
-  const created = await DynamicOrder.create({
-    ...filter,
-    ...details,
-    sourceMessageId: messageId,
-    sourceText: String(text).slice(0, 12000),
-    status: "PENDING",
-  });
+  // findOne-then-create is not atomic. Two handlers running at once - a
+  // customer sending the same details twice, or an order backfill racing the
+  // live message path - both miss the findOne and both insert, and MongoDB
+  // rejects the loser with E11000 on
+  // user_1_session_1_customerPhone_1_applicationId_1.
+  //
+  // That exception used to escape. It aborted the caller: the inbound message
+  // failed to save, or a vendor delivery was recorded as a processing ERROR and
+  // the file went to the review group instead of the customer - all because the
+  // record it wanted already existed.
+  //
+  // The loser of the race wants exactly what the winner just wrote, so fetching
+  // that record and carrying on is the correct outcome, not an error. The unique
+  // index stays as the authority on identity; this only stops a won race from
+  // looking like a failure.
+  let created;
+  try {
+    created = await DynamicOrder.create({
+      ...filter,
+      ...details,
+      sourceMessageId: messageId,
+      sourceText: String(text).slice(0, 12000),
+      status: "PENDING",
+    });
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+
+    const winner = await DynamicOrder.findOne(filter);
+    if (winner) {
+      console.log(`[Order] ${phone}: ${details.applicationId} was created concurrently - reusing it`);
+      return winner;
+    }
+    // A duplicate key with nothing to find means the conflict was on some other
+    // index, which is a real fault and must not be swallowed.
+    throw error;
+  }
 
   // Replace only earlier readings of the SAME person. Re-sending one document
   // rarely produces an identical applicationId — it hashes the parsed fields and
