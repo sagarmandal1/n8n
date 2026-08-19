@@ -61,6 +61,11 @@ async function runTextExtraction(pdfPath) {
   return String(stdout || "").trim();
 }
 
+// Scanned-PDF OCR page bounds. Text PDFs are unaffected - pdftotext reads all
+// pages. These only cap how many pages get rasterised and OCR'd, which is the
+// expensive part: roughly 2-7s per page depending on scan quality.
+const PDF_OCR_PAGE_LIMIT = 5;
+
 async function runOcrExtraction(pdfPath) {
   const tmpDir = path.join(
     process.cwd(),
@@ -75,7 +80,12 @@ async function runOcrExtraction(pdfPath) {
     // 300 dpi is Tesseract's documented sweet spot. pdftoppm defaults to 150,
     // which misreads digits on otherwise clean pages (a 0 came back as @ or 6);
     // 400 is no better than 300 and costs more time and memory per page.
-    await execFileAsync("pdftoppm", ["-r", "300", "-png", "-f", "1", "-l", "3", pdfPath, prefix]);
+    // Page 1 alone is not enough: a certificate is often a cover page with
+    // the identity fields overleaf, and an unread page contributes nothing to
+    // matching. pdftotext (stage 1) already reads every page of a text PDF, so
+    // this bound only applies to SCANNED documents, where each page costs a
+    // full Tesseract pass.
+    await execFileAsync("pdftoppm", ["-r", "300", "-png", "-f", "1", "-l", String(PDF_OCR_PAGE_LIMIT), pdfPath, prefix]);
     const files = (await fs.readdir(tmpDir))
       .filter((file) => file.endsWith(".png"))
       .sort();
@@ -232,7 +242,7 @@ export async function extractImageText(imagePath) {
 //
 // Pages are rendered inside public/received_media because the EasyOCR service
 // refuses any path outside that root.
-const PDF_DEEP_PAGE_LIMIT = 2;
+const PDF_DEEP_PAGE_LIMIT = 3;
 
 export async function extractPdfTextDeep(pdfPath) {
   if (!pdfPath) {

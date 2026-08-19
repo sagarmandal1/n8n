@@ -1264,13 +1264,29 @@ export async function initSession(userId, sessionId) {
                // does a substring check on digits, so a shorter application ID
                // sitting anywhere inside such a timestamp would match a customer
                // who has nothing to do with the file.
-               let searchable = [
-                 mediaMeta?.ocrText || "",
-                 extractMessageText(actualMessage),
-               ].join(" ");
+               // WHO the file belongs to is decided by the document alone.
+               //
+               // The caption and quoted text used to be joined in here, which
+               // meant a vendor typing a customer name beside an unrelated file
+               // could steer the match. Identity has to come from the thing being
+               // delivered: the certificate is what the customer receives, and it
+               // is the only evidence a vendor cannot get wrong by typing in the
+               // wrong chat.
+               //
+               // Losing the caption costs some matches, and those become NO_MATCH
+               // and go to the review group. That is the direction to fail in: a
+               // file in the review queue costs two minutes, a file sent to the
+               // wrong person exposes a stranger's national ID and cannot be
+               // recalled.
+               let searchable = String(mediaMeta?.ocrText || "");
+
+               // What the vendor WROTE stays available, but only for workflow
+               // markers - never for identity. "Revision Done" is an instruction
+               // about the file, not a claim about who owns it.
+               const vendorNote = extractMessageText(actualMessage);
                // The marker is read from what the vendor wrote with the file —
                // caption or quoted text — not from the document's own content.
-               const revisionDone = isRevisionDone(extractMessageText(actualMessage))
+               const revisionDone = isRevisionDone(vendorNote)
                  || await vendorMarkedRevisionDone(userId, sessionId, senderPhone);
                const mediaMatch = Boolean(downloadedMediaBuffer && ["imageMessage", "documentMessage"].includes(msgType));
                // Never relax the two-field rule on the strength of a filename:
@@ -1480,7 +1496,10 @@ export async function initSession(userId, sessionId) {
                    for (const task of sentTasks) {
                      const taskText = String(task.body || "").trim();
                      if (!taskText) continue;
-                     if (!taskOverlapsImage(taskText, mediaMeta?.ocrText || searchable)) continue;
+                     // The task text is the office's own sent message from the
+                     // database, not something the vendor typed - but it still
+                     // only counts when it overlaps the document itself.
+                     if (!taskOverlapsImage(taskText, mediaMeta?.ocrText || "")) continue;
                      const taskMatches = await findDynamicOrderMatches({
                        userId,
                        sessionId,
