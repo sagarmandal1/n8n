@@ -45,7 +45,15 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_SSH_PORT || 22 }}
           envs: APP_PORT
-          script_stops: true
+          # No script_stops: this version of the action does not accept it, so
+          # it is only warned about and never honoured. `set -euo pipefail` on
+          # the first line of the script is what actually aborts the deploy on
+          # the first failing command.
+          #
+          # debug surfaces the SSH handshake. A key that fails to parse reports
+          # "ssh.ParsePrivateKey: ssh: no key found" and never reaches the
+          # server, which otherwise looks identical to a script failure.
+          debug: true
           script: |
             set -euo pipefail
 
