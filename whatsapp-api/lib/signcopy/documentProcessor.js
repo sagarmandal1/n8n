@@ -19,6 +19,39 @@ async function runCaptchaServiceOcr(imagePath) {
   return String(response.data?.text || "").trim();
 }
 
+
+export async function extractImageTextEasyOcr(imagePath) {
+  if (!imagePath) {
+    return { text: "", method: "NONE", error: "Missing image path" };
+  }
+
+  try {
+    const response = await axios.post(
+      "http://127.0.0.1:4014/ocr",
+      { path: path.resolve(imagePath) },
+      {
+        timeout: 75000,
+        maxContentLength: 2 * 1024 * 1024,
+        maxBodyLength: 2 * 1024 * 1024,
+      },
+    );
+
+    const text = String(response.data?.text || "").trim();
+
+    return {
+      text,
+      method: text ? "EASYOCR" : "NONE",
+      error: text ? null : "EasyOCR returned no readable text",
+    };
+  } catch (error) {
+    return {
+      text: "",
+      method: "NONE",
+      error: `EasyOCR unavailable: ${error.message}`,
+    };
+  }
+}
+
 async function runTextExtraction(pdfPath) {
   const { stdout } = await execFileAsync("pdftotext", [
     "-layout",
@@ -67,7 +100,7 @@ async function runOcrExtraction(pdfPath) {
   }
 }
 
-async function runImageOcr(imagePath) {
+async function runImageOcr(imagePath, fast = false) {
   const tmpDir = path.join(
     process.cwd(),
     "tmp",
@@ -80,7 +113,8 @@ async function runImageOcr(imagePath) {
     // useful result. This handles screen photos better than one ImageMagick
     // pass, while keeping the OCR fully local.
     const script = path.join(process.cwd(), "lib", "signcopy", "local_ocr.py");
-    const { stdout } = await execFileAsync("python3", [script, imagePath], {
+    const args = fast ? [script, imagePath, "--fast"] : [script, imagePath];
+    const { stdout } = await execFileAsync("python3", args, {
       maxBuffer: 4 * 1024 * 1024,
       timeout: 90000,
     });
@@ -119,26 +153,81 @@ export async function extractPdfText(pdfPath) {
 }
 
 export async function extractImageText(imagePath) {
-  if (!imagePath) return { text: "", method: "NONE", error: "Missing image path" };
+  if (!imagePath) {
+    return { text: "", method: "NONE", error: "Missing image path" };
+  }
+
+  let localText = "";
+  let fallbackText = "";
   let localError = null;
+
+  // Attempts 1-4 are handled inside local_ocr.py:
+  // full-frame variants, broad field crops, focused red-name,
+  // and focused green-name OCR.
   try {
-    const text = await runImageOcr(imagePath);
-    if (text && text.length >= 3) {
-      return { text, method: "OCR", error: null };
-    }
-    localError = "No readable text found";
+    localText = String(await runImageOcr(imagePath) || "").trim();
+    if (!localText) localError = "No readable local OCR text found";
   } catch (error) {
     localError = error.message;
   }
+
+  // Attempt 5: always run the independent fallback OCR service.
+  // Do not skip it merely because local OCR produced a few noisy characters.
   try {
-    const fallback = await runCaptchaServiceOcr(imagePath);
-    if (fallback.length >= 3) {
-      return { text: fallback, method: "OCR", error: null };
-    }
+    fallbackText = String(await runCaptchaServiceOcr(imagePath) || "").trim();
   } catch (_) {
-    // Keep the original local OCR error in the result.
+    // Local OCR can still succeed when fallback service is unavailable.
   }
-  return { text: "", method: "NONE", error: localError || "No readable text found" };
+
+  const lines = [];
+  const seen = new Set();
+
+  for (const block of [localText, fallbackText]) {
+    for (const rawLine of String(block || "").split(/\r?\n/u)) {
+      const line = rawLine.trim();
+      if (line.length < 3) continue;
+
+      const key = line
+        .normalize("NFKC")
+        .toLowerCase()
+        .replace(/\s+/gu, " ");
+
+      if (!key || seen.has(key)) continue;
+
+      seen.add(key);
+      lines.push(line);
+
+      if (lines.length >= 120) break;
+    }
+
+    if (lines.length >= 120) break;
+  }
+
+  const combined = lines.join("\n").trim();
+
+  if (combined.length >= 3) {
+    return {
+      text: combined,
+      method: fallbackText ? "OCR_MULTI_PASS" : "OCR",
+      error: null,
+    };
+  }
+
+  return {
+    text: "",
+    method: "NONE",
+    error: localError || "No readable text found after all OCR attempts",
+  };
+}
+
+export async function extractImageTextFast(imagePath) {
+  if (!imagePath) return { text: "", method: "NONE", error: "Missing image path" };
+  try {
+    const text = String(await runImageOcr(imagePath, true) || "").trim();
+    return { text, method: text ? "OCR_FAST_LOCAL" : "NONE", error: text ? null : "No readable text found" };
+  } catch (error) {
+    return { text: "", method: "NONE", error: error.message };
+  }
 }
 
 export async function extractAudioText(audioPath) {

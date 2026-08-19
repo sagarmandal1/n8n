@@ -39,6 +39,8 @@ import { startCampaignQueue } from "./lib/campaignQueue.js";
 import { initSession, closeAllSessions } from "./lib/whatsapp.js";
 import agentOperationsRouter from "./routers/agentOperationsRouter.js";
 import { n8nSendText } from "./controllers/n8nInternalController.js";
+import ocrTestRouter from "./routers/ocrTestRouter.js";
+import ocrLensRouter from "./routers/ocrLensRouter.js";
 
 const app = express();
 await connectDB();
@@ -51,7 +53,10 @@ const sessionsToRestore = await Session.find(
 
 for (const s of sessionsToRestore) {
   try {
-    await initSession(String(s.user), String(s._id));
+    await Promise.race([
+      initSession(String(s.user), String(s._id)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("session restore timeout")), 20000)),
+    ]);
     console.log(`♻️ Session restored: ${s._id}`);
   } catch (error) {
     console.error(`Failed to restore session ${s._id}:`, error.message);
@@ -117,6 +122,8 @@ app.use("/api/session", authenticate, sessionRouter);
 
 // Private server-to-server endpoint for n8n
 app.post("/api/internal/n8n/send/text", n8nSendText);
+app.use("/api/ocr-test", ocrTestRouter);
+app.use("/api/ocr-lens-test", ocrLensRouter);
 app.use("/api/whatsapp", subscriptionMiddleware, whatsappRouter);
 app.use("/api/agent", subscriptionMiddleware, agentOperationsRouter);
 app.use("/api/autoreply", authenticate, autoReplyRouter);

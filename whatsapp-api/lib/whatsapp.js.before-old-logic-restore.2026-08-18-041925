@@ -10,7 +10,7 @@ import {
   DisconnectReason,
   Browsers,
   downloadMediaMessage,
-  fetchLatestBaileysVersion,
+  fetchLatestWaWebVersion,
 } from "@whiskeysockets/baileys";
 import sessionModel from "../models/sessionModel.js"; // ← DB
 import User from "../models/userModel.js";
@@ -153,13 +153,27 @@ export async function backfillLidIdentity(lid, phone, sessionId = null) {
 
   const results = { messages: 0, orders: 0, merged: 0, audits: 0 };
 
-  const msgs = await Message.updateMany({ fromNumber: lidNum }, { $set: { fromNumber: realPhone } });
+  if (!sessionId) {
+    throw new Error("backfillLidIdentity requires sessionId");
+  }
+
+  // LID values are only meaningful inside the WhatsApp session that learned
+  // the mapping. Never rewrite another customer's/session's records.
+  const identityScope = { session: sessionId };
+
+  const msgs = await Message.updateMany(
+    { ...identityScope, fromNumber: lidNum },
+    { $set: { fromNumber: realPhone } },
+  );
   results.messages = msgs.modifiedCount || 0;
 
   // DynamicOrder has a unique index on {user, session, customerPhone,
   // applicationId}, so a blind update collides whenever the phone-keyed twin
   // already exists. Drop the LID copy in that case, otherwise re-key it.
-  for (const stale of await DynamicOrder.find({ customerPhone: lidNum })) {
+  for (const stale of await DynamicOrder.find({
+    ...identityScope,
+    customerPhone: lidNum,
+  })) {
     const twin = await DynamicOrder.findOne({
       user: stale.user,
       session: stale.session,
@@ -176,7 +190,10 @@ export async function backfillLidIdentity(lid, phone, sessionId = null) {
     }
   }
 
-  const audits = await AgentAudit.updateMany({ customerPhone: lidNum }, { $set: { customerPhone: realPhone } });
+  const audits = await AgentAudit.updateMany(
+    { ...identityScope, customerPhone: lidNum },
+    { $set: { customerPhone: realPhone } },
+  );
   results.audits = audits.modifiedCount || 0;
 
   if (results.messages || results.orders || results.merged || results.audits) {
@@ -580,14 +597,22 @@ export async function initSession(userId, sessionId) {
     const readyDef = deferred();
     const qrDef = deferred();
 
-    let waVersion = [2, 3000, 1035194821];
+    // Prefer the live WhatsApp Web version for new-device pairing.
+    // The Baileys bundled/version endpoint can return a stale protocol version.
+    let waVersion = [2, 3000, 1045333625];
     try {
-      const { version } = await fetchLatestBaileysVersion();
-      if (Array.isArray(version)) {
+      const { version, isLatest } = await fetchLatestWaWebVersion();
+      if (Array.isArray(version) && version.length === 3) {
         waVersion = version;
       }
+      console.log(
+        `[Baileys] Using WA Web version ${waVersion.join(".")} (latest=${isLatest})`
+      );
     } catch (err) {
-      console.error("[Baileys] Failed to fetch latest version, using fallback:", err.message);
+      console.error(
+        `[Baileys] WA Web version fetch failed; using verified fallback ${waVersion.join(".")}:`,
+        err.message
+      );
     }
 
     const sock = makeWASocket({
@@ -637,24 +662,21 @@ export async function initSession(userId, sessionId) {
             const lid = c.lid.replace(/@lid$/i, "");
             if (realPhone && lid && realPhone !== lid) {
               lidPhoneMap[lid] = realPhone;
-              await Message.updateMany({ fromNumber: lid }, { $set: { fromNumber: realPhone } })
-                .catch(err => console.error("[LID Backfill]", err.message));
+              await backfillLidIdentity(lid, realPhone, sessionId);
               console.log(`[LID Resolved] ${lid} → ${realPhone}`);
             }
           } else if (isLid && c.jid) {
             realPhone = c.jid.replace(/@s\.whatsapp\.net$/i, "");
             if (realPhone && lidNum && realPhone !== lidNum) {
               lidPhoneMap[lidNum] = realPhone;
-              await Message.updateMany({ fromNumber: lidNum }, { $set: { fromNumber: realPhone } })
-                .catch(err => console.error("[LID Backfill]", err.message));
+              await backfillLidIdentity(lidNum, realPhone, sessionId);
               console.log(`[LID Resolved] ${lidNum} → ${realPhone}`);
             }
           } else if (isLid && c.phoneNumber) {
             realPhone = c.phoneNumber.replace(/\D/g, "");
             if (realPhone && lidNum && realPhone !== lidNum) {
               lidPhoneMap[lidNum] = realPhone;
-              await Message.updateMany({ fromNumber: lidNum }, { $set: { fromNumber: realPhone } })
-                .catch(err => console.error("[LID Backfill]", err.message));
+              await backfillLidIdentity(lidNum, realPhone, sessionId);
               console.log(`[LID Resolved] ${lidNum} → ${realPhone}`);
             }
           }
@@ -684,13 +706,8 @@ export async function initSession(userId, sessionId) {
       }
       if (realPhone && lidNum && realPhone !== lidNum && !lidPhoneMap[lidNum]) {
         lidPhoneMap[lidNum] = realPhone;
-        const updated = await Message.updateMany(
-          { fromNumber: lidNum },
-          { $set: { fromNumber: realPhone } }
-        ).catch(err => console.error("[LID Backfill] DB error:", err.message));
-        if (updated?.modifiedCount > 0) {
-          console.log(`[LID Resolved] ${lidNum} → ${realPhone} (${updated.modifiedCount} messages updated)`);
-        }
+        await backfillLidIdentity(lidNum, realPhone, sessionId);
+        console.log(`[LID Resolved] ${lidNum} → ${realPhone}`);
       }
     }
 
@@ -974,8 +991,7 @@ export async function initSession(userId, sessionId) {
                 lidPhoneMap[rawNum] = realPhone;
                 senderPhone = realPhone;
                 // Re-key messages, orders and audits that stored the LID
-                backfillLidIdentity(rawNum, realPhone, sessionId)
-                  .catch(err => console.error("[LID→Phone DB]", err.message));
+                await backfillLidIdentity(rawNum, realPhone, sessionId);
               }
             }
           }
@@ -1009,8 +1025,7 @@ export async function initSession(userId, sessionId) {
               if (realPhone && realPhone !== rawNum) {
                 lidPhoneMap[rawNum] = realPhone;
                 senderPhone = realPhone;
-                backfillLidIdentity(rawNum, realPhone, sessionId)
-                  .catch((err) => console.error("[LID→Phone DB]", err.message));
+                await backfillLidIdentity(rawNum, realPhone, sessionId);
               }
             } catch (err) {
               console.error(`[LID→Phone lookup] ${rawNum}:`, err.message);
