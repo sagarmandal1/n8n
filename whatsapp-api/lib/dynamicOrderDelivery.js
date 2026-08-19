@@ -1170,12 +1170,14 @@ export async function findDynamicOrderMatches({ userId, sessionId, evidenceText,
       };
     })
       .filter((result) => !result.genderConflict)
-      .filter((result) =>
-        !result.dobConflict ||
-        result.firstNameDayMonthFallback ||
-        result.lastNameDayMonthFallback ||
-        result.uniqueOpenNameFallback
-      )
+
+      // A CONFLICTING DATE OF BIRTH IS A HARD REJECT.
+      //
+      // This used to be overridable by the name fallbacks below. It cannot be:
+      // a stated date of birth that disagrees is proof of a different person,
+      // and no amount of name similarity outranks proof. Siblings and cousins
+      // share names constantly; they do not share birthdays.
+      .filter((result) => !result.dobConflict)
 
       // AUTO-DELIVERY SAFETY RULE:
       // The person's NAME and DATE OF BIRTH must BOTH agree.
@@ -1184,7 +1186,13 @@ export async function findDynamicOrderMatches({ userId, sessionId, evidenceText,
       // parents' names and address are supporting evidence only. None of them
       // can replace either name or DOB for automatic customer delivery.
       //
-      // If OCR cannot recover both required fields, the document fails closed
+      // uniquePartialNameFallback is deliberately NOT in this list. A partial
+      // name is one token, and in Bangladesh that token is usually a shared
+      // surname: an order for "ফাহিম হোসেন" matched a certificate belonging to
+      // "মোফাজ্জেল হোসেন চীল মিঞা" on হোসেন alone, and the file was delivered to
+      // the wrong customer. Partial-name evidence now goes to review.
+      //
+      // If OCR cannot recover the required fields, the document fails closed
       // and is routed to the configured Review / Unmatched group.
       .filter((result) =>
         (
@@ -1194,10 +1202,19 @@ export async function findDynamicOrderMatches({ userId, sessionId, evidenceText,
             result.uniqueNameFallback
           )
         ) ||
-        result.uniquePartialNameFallback ||
         result.firstNameDayMonthFallback ||
         result.lastNameDayMonthFallback ||
         result.uniqueOpenNameFallback
+      )
+
+      // MINIMUM EVIDENCE FLOOR.
+      //
+      // vendorAssignment says who was asked to do the work, not whose document
+      // this is. One delivery was made on that field ALONE. It may still rank
+      // candidates - it stays in the score - but it can never be one of the two
+      // signals that identify a person.
+      .filter((result) =>
+        result.matchedFields.filter((field) => field !== "vendorAssignment").length >= 2
       )
     .sort((a, b) => b.score - a.score);
 }

@@ -1280,6 +1280,24 @@ export async function initSession(userId, sessionId) {
                // recalled.
                let searchable = String(mediaMeta?.ocrText || "");
 
+               // FAIL CLOSED ON UNUSABLE OCR.
+               //
+               // EasyOCR has timed out at 75s in production, and a rasterised
+               // page can come back as noise. Either way the evidence is a few
+               // stray characters, which is not "no match" - it is "we could not
+               // read the document", and the two must not be treated alike. With
+               // weak evidence the name fallbacks are exactly what fire, so this
+               // is the state that produces wrong-customer deliveries.
+               //
+               // 40 characters is well under any real certificate (the incident
+               // document produced 2,525) and well above OCR noise.
+               const MIN_IDENTITY_EVIDENCE_CHARS = 40;
+               // Evaluated on each use rather than captured once: the EasyOCR /
+               // deep-PDF pass reassigns `searchable`, and a document it rescues
+               // must stop being unreadable.
+               const documentUnreadable = () =>
+                 searchable.replace(/\s+/gu, "").length < MIN_IDENTITY_EVIDENCE_CHARS;
+
                // What the vendor WROTE stays available, but only for workflow
                // markers - never for identity. "Revision Done" is an instruction
                // about the file, not a claim about who owns it.
@@ -1330,7 +1348,12 @@ export async function initSession(userId, sessionId) {
                  && (mediaMeta?.ocrText || mediaMeta?.fileName || chatJid.endsWith("@g.us"))
                ) {
                  let ocrIdentityConflict = null;
-                 let matches = await findDynamicOrderMatches({ userId, sessionId, evidenceText: searchable, filenameExact, vendorPhone: senderPhone, revisionDone });
+                 let matches = documentUnreadable()
+                   ? []
+                   : await findDynamicOrderMatches({ userId, sessionId, evidenceText: searchable, filenameExact, vendorPhone: senderPhone, revisionDone });
+                 if (documentUnreadable()) {
+                   console.warn(`[OCR] ${mediaMeta?.fileName || "file"}: only ${searchable.trim().length} chars of text - too little to identify anyone, routing to review`);
+                 }
                  let match = matches[0];
                  // Backfill recent order messages so an order received during a
                  // previous webhook outage can still be delivered safely.
@@ -1364,7 +1387,9 @@ export async function initSession(userId, sessionId) {
                        messageId: historicalMessage.message?.key?.id || "",
                      });
                    }
-                   matches = await findDynamicOrderMatches({ userId, sessionId, evidenceText: searchable, filenameExact, vendorPhone: senderPhone, revisionDone });
+                   matches = documentUnreadable()
+                     ? []
+                     : await findDynamicOrderMatches({ userId, sessionId, evidenceText: searchable, filenameExact, vendorPhone: senderPhone, revisionDone });
                    match = matches[0];
                  }
 
@@ -1527,7 +1552,9 @@ export async function initSession(userId, sessionId) {
                  // the normal delivery path rather than a second copy of it.
                  if (!match && !ocrIdentityConflict) {
                    await new Promise((resolve) => setTimeout(resolve, DELIVERY_HOLD_MS));
-                   const retry = await findDynamicOrderMatches({ userId, sessionId, evidenceText: searchable, filenameExact, vendorPhone: senderPhone, revisionDone });
+                   const retry = documentUnreadable()
+                     ? []
+                     : await findDynamicOrderMatches({ userId, sessionId, evidenceText: searchable, filenameExact, vendorPhone: senderPhone, revisionDone });
                    if (retry.length) {
                      console.log(`[Dynamic Delivery] matched on retry after ${DELIVERY_HOLD_MS}ms - customer data arrived late`);
                      matches = retry;
