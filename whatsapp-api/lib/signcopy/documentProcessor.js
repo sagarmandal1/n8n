@@ -220,6 +220,111 @@ export async function extractImageText(imagePath) {
   };
 }
 
+// A scanned PDF used to get markedly weaker OCR than the same page sent as a
+// photo: images run the multi-variant local engine and can fall back to
+// EasyOCR, while a PDF got one plain Tesseract pass per rendered page. Same
+// document, same customer, different odds of being delivered.
+//
+// This is the PDF equivalent of the image fallback. It is deliberately NOT part
+// of extractPdfText: stage 1 (pdftotext) and stage 2 (rasterise + one Tesseract
+// pass) are fast and resolve most documents, so this only runs once matching has
+// already failed — the same cheap-first order the image path uses.
+//
+// Pages are rendered inside public/received_media because the EasyOCR service
+// refuses any path outside that root.
+const PDF_DEEP_PAGE_LIMIT = 2;
+
+export async function extractPdfTextDeep(pdfPath) {
+  if (!pdfPath) {
+    return { text: "", method: "NONE", error: "Missing PDF path" };
+  }
+
+  const workDir = path.join(
+    process.cwd(),
+    "public",
+    "received_media",
+    ".pdf-pages",
+    crypto.randomBytes(6).toString("hex"),
+  );
+  await fs.ensureDir(workDir);
+
+  try {
+    const prefix = path.join(workDir, "page");
+    await execFileAsync("pdftoppm", [
+      "-r", "300", "-png", "-f", "1", "-l", String(PDF_DEEP_PAGE_LIMIT), pdfPath, prefix,
+    ]);
+
+    const pages = (await fs.readdir(workDir))
+      .filter((file) => file.endsWith(".png"))
+      .sort();
+
+    if (!pages.length) {
+      return { text: "", method: "NONE", error: "PDF produced no rendered pages" };
+    }
+
+    const lines = [];
+    const seen = new Set();
+
+    const addText = (block) => {
+      for (const rawLine of String(block || "").split(/\r?\n/u)) {
+        const line = rawLine.trim();
+        if (line.length < 3) continue;
+
+        const key = line.normalize("NFKC").toLowerCase().replace(/\s+/gu, " ");
+        if (!key || seen.has(key)) continue;
+
+        seen.add(key);
+        lines.push(line);
+
+        if (lines.length >= 160) return;
+      }
+    };
+
+    let usedEasyOcr = false;
+
+    for (const page of pages) {
+      const pagePath = path.join(workDir, page);
+
+      // Multi-variant local OCR: the same engine, preprocessing and
+      // competing-reading dedupe the image path relies on.
+      //
+      // Fast mode, and not only for speed. A rendered page arrives at native
+      // 300-dpi size, where full mode keeps every bit of scan-line and sensor
+      // noise; measured on a degraded certificate it spent 94s and returned
+      // unusable text. Fast mode's 1400px working image averages that noise
+      // away and read the same page correctly in 2s. Downsampling is itself a
+      // denoiser here, so the cheaper path is also the more accurate one.
+      try {
+        addText(await runImageOcr(pagePath, true));
+      } catch (_) {
+        // A failed page must not lose the pages that did read.
+      }
+
+      const easy = await extractImageTextEasyOcr(pagePath);
+      if (easy.text) {
+        usedEasyOcr = true;
+        addText(easy.text);
+      }
+    }
+
+    const text = lines.join("\n").trim();
+
+    if (!text) {
+      return { text: "", method: "NONE", error: "No readable text found in rendered PDF pages" };
+    }
+
+    return {
+      text,
+      method: usedEasyOcr ? "PDF_DEEP_MULTI_PASS" : "PDF_DEEP_LOCAL",
+      error: null,
+    };
+  } catch (error) {
+    return { text: "", method: "NONE", error: error.message };
+  } finally {
+    await fs.remove(workDir);
+  }
+}
+
 export async function extractImageTextFast(imagePath) {
   if (!imagePath) return { text: "", method: "NONE", error: "Missing image path" };
   try {
