@@ -193,7 +193,11 @@ jobs:
             # pm2 reports "online" for a moment even when the process is about
             # to crash on boot, so status alone is not evidence.
             # ---------------------------------------------------------------
-            sleep 8
+            # server.js restores every connected WhatsApp session BEFORE it calls
+            # app.listen(), sequentially, with a 20s timeout each. Two sessions
+            # means the port can stay shut for 40s or more, and the old 28s
+            # budget rolled back deploys that were entirely healthy.
+            sleep 5
 
             # pm2 prints advisory banners on STDOUT ahead of the JSON when the
             # in-memory daemon is older than the installed CLI:
@@ -221,18 +225,35 @@ jobs:
             ' "$APP_PROCESS")
             echo "pm2 status: $STATUS"
 
+            # Poll until the port answers or the budget runs out, and report how
+            # long it actually took - the number is the only way to know whether
+            # this window is still generous enough as sessions are added.
+            #
+            # curl prints "000" of its own accord when it cannot connect, so the
+            # fallback must not echo another one: `|| echo 000` produced the
+            # nonsense code "000000" that never matched anything.
+            HEALTH_BUDGET_SECONDS=180
+            HEALTH_POLL_SECONDS=5
+            STARTED_AT=$SECONDS
             HEALTHY=0
+
             if [ "$STATUS" = "online" ]; then
-              for attempt in 1 2 3 4 5; do
-                CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:${PORT}/" || echo 000)
-                if [ "$CODE" = "200" ] || [ "$CODE" = "302" ] || [ "$CODE" = "401" ]; then
-                  echo "port $PORT responded (HTTP $CODE) on attempt $attempt"
-                  HEALTHY=1
-                  break
-                fi
-                echo "attempt $attempt: HTTP $CODE - retrying"
-                sleep 4
+              while [ $((SECONDS - STARTED_AT)) -lt "$HEALTH_BUDGET_SECONDS" ]; do
+                CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:${PORT}/") || CODE=000
+                case "$CODE" in
+                  200|302|401)
+                    echo "port $PORT responded (HTTP $CODE) after $((SECONDS - STARTED_AT))s"
+                    HEALTHY=1
+                    break
+                    ;;
+                esac
+                echo "  waiting for port $PORT (HTTP $CODE) - $((SECONDS - STARTED_AT))s elapsed"
+                sleep "$HEALTH_POLL_SECONDS"
               done
+            fi
+
+            if [ "$HEALTHY" -ne 1 ]; then
+              echo "::error::port $PORT never answered within ${HEALTH_BUDGET_SECONDS}s"
             fi
 
             if [ "$HEALTHY" -ne 1 ]; then
