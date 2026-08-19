@@ -1,0 +1,239 @@
+name: Deploy WaFastAPI
+
+# Only application changes and this workflow itself trigger a production
+# deploy. Editing a markdown file must not restart a live WhatsApp session.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "whatsapp-api/**"
+      - ".github/workflows/deploy-wafastapi.yml"
+  workflow_dispatch: {}
+
+# Two pushes in quick succession must not deploy on top of each other: npm ci
+# and a pm2 restart running twice at once leaves the app in an unpredictable
+# state. Later runs wait. They are not cancelled, because a half-finished
+# deploy is worse than a delayed one.
+concurrency:
+  group: wafastapi-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          APP_PORT: ${{ vars.VPS_APP_PORT || '3012' }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          envs: APP_PORT
+          script_stops: true
+          script: |
+            set -euo pipefail
+
+            REPO_ROOT=/root/n8n
+            APP_ROOT=/root/n8n/whatsapp-api
+            APP_PROCESS=whatsapp-api
+            OCR_PROCESS=wafastapi-easyocr
+            PORT="${APP_PORT:-3012}"
+
+            cd "$REPO_ROOT"
+
+            # ---------------------------------------------------------------
+            # 1. Fail closed on server-side edits.
+            #
+            # Only TRACKED changes block. Untracked files are how production
+            # config lives here on purpose: .env, vendors.txt, sessions/ and
+            # public/received_media/ are all gitignored and must survive every
+            # deploy untouched.
+            #
+            # Without this check a pull that cannot fast-forward would leave the
+            # app running old code while the workflow reported success.
+            # ---------------------------------------------------------------
+            if ! git diff --quiet || ! git diff --cached --quiet; then
+              echo "::error::tracked files are modified on the server - deploy aborted"
+              echo "Review and resolve on the VPS, then re-run this workflow:"
+              git status --short -- ':!*.env' | head -40
+              exit 1
+            fi
+
+            PREVIOUS=$(git rev-parse HEAD)
+            echo "current commit: $PREVIOUS"
+
+            # ---------------------------------------------------------------
+            # 2. Advance to origin/main, fast-forward only.
+            #
+            # --ff-only is the safety property: if the server has commits that
+            # are not on origin/main the pull FAILS instead of discarding them.
+            # No reset --hard, no clean -fd; nothing here can delete a file.
+            # ---------------------------------------------------------------
+            git fetch origin main
+            git switch main
+            git pull --ff-only origin main
+
+            DEPLOYED=$(git rev-parse HEAD)
+            echo "deployed commit: $DEPLOYED"
+
+            if [ "$PREVIOUS" = "$DEPLOYED" ]; then
+              echo "already up to date - nothing to deploy"
+              exit 0
+            fi
+
+            # Which files changed. Used for the syntax gate and to decide
+            # whether the OCR service needs a restart.
+            CHANGED=$(git diff --name-only "$PREVIOUS" "$DEPLOYED")
+            echo "changed files:"
+            echo "$CHANGED" | sed 's/^/  /'
+
+            cd "$APP_ROOT"
+
+            # ---------------------------------------------------------------
+            # 3. Configuration must exist before anything is restarted.
+            #
+            # Starting with no .env means no database URI and no JWT secret.
+            # Only its presence is tested - never its contents.
+            # ---------------------------------------------------------------
+            test -f .env || { echo "::error::.env is missing on the server"; exit 1; }
+
+            # ---------------------------------------------------------------
+            # 4. Dependencies.
+            #
+            # npm ci honours package-lock.json exactly. npm install can silently
+            # resolve versions that were never tested.
+            # ---------------------------------------------------------------
+            if echo "$CHANGED" | grep -qE '^whatsapp-api/package(-lock)?\.json$'; then
+              echo "dependency manifest changed - running npm ci"
+              npm ci --omit=dev
+            else
+              echo "no dependency change - skipping npm ci"
+            fi
+
+            # ---------------------------------------------------------------
+            # 5. Syntax gate, BEFORE any restart.
+            #
+            # A parse error in one of these files takes the whole process down
+            # on boot. Checking first means a bad commit never reaches pm2 and
+            # the currently running app keeps serving.
+            # ---------------------------------------------------------------
+            echo "validating syntax"
+            SYNTAX_OK=1
+            for f in lib/whatsapp.js lib/dynamicOrderDelivery.js server.js; do
+              if node --check "$f"; then
+                echo "  OK   $f"
+              else
+                echo "::error::syntax check failed: $f"
+                SYNTAX_OK=0
+              fi
+            done
+
+            if [ "$SYNTAX_OK" -ne 1 ]; then
+              echo "::error::returning the checkout to $PREVIOUS - the running app was NOT restarted"
+              cd "$REPO_ROOT"
+              git switch --detach "$PREVIOUS"
+              exit 1
+            fi
+
+            # ---------------------------------------------------------------
+            # 6. Restart the backend only.
+            #
+            # Named process, never `pm2 restart all`: this VPS also runs n8n and
+            # the OCR service, and restarting a WhatsApp socket drops the live
+            # connection until it re-links.
+            # ---------------------------------------------------------------
+            pm2 restart "$APP_PROCESS" --update-env
+
+            # ---------------------------------------------------------------
+            # 7. Restart the OCR service only when its own code changed.
+            #
+            # It is a separate Python process that loads EasyOCR models at boot,
+            # which takes time and briefly makes the fallback unavailable. The
+            # Node caller is not part of the service, so a change to
+            # documentProcessor.js is covered by the backend restart above.
+            # ---------------------------------------------------------------
+            if echo "$CHANGED" | grep -qE '^whatsapp-api/(easyocr_service\.py|lib/signcopy/easyocr_service\.py|requirements.*\.txt)$'; then
+              if pm2 describe "$OCR_PROCESS" > /dev/null 2>&1; then
+                echo "EasyOCR service code changed - restarting $OCR_PROCESS"
+                pm2 restart "$OCR_PROCESS" --update-env
+              else
+                echo "::warning::$OCR_PROCESS is not registered with pm2 - skipping its restart"
+              fi
+            else
+              echo "no EasyOCR service change - leaving $OCR_PROCESS running"
+            fi
+
+            # ---------------------------------------------------------------
+            # 8. Prove it actually serves traffic.
+            #
+            # pm2 reports "online" for a moment even when the process is about
+            # to crash on boot, so status alone is not evidence.
+            # ---------------------------------------------------------------
+            sleep 8
+
+            # pm2 prints advisory banners on STDOUT ahead of the JSON when the
+            # in-memory daemon is older than the installed CLI:
+            #
+            #   >>>> In-memory PM2 is out-of-date, do:
+            #   >>>> $ pm2 update
+            #   [{"pid":...
+            #
+            # Parsing the raw stream then throws, the status reads "missing",
+            # and a healthy deploy gets rolled back. Start at the first bracket
+            # instead of trusting the stream to begin with one.
+            STATUS=$(pm2 jlist | node -e '
+              let raw = "";
+              process.stdin.on("data", (c) => { raw += c; });
+              process.stdin.on("end", () => {
+                const name = process.argv[1];
+                let list = [];
+                const start = raw.indexOf("[");
+                if (start >= 0) {
+                  try { list = JSON.parse(raw.slice(start)); } catch (_) {}
+                }
+                const proc = Array.isArray(list) ? list.find((p) => p && p.name === name) : null;
+                process.stdout.write(proc && proc.pm2_env ? String(proc.pm2_env.status) : "missing");
+              });
+            ' "$APP_PROCESS")
+            echo "pm2 status: $STATUS"
+
+            HEALTHY=0
+            if [ "$STATUS" = "online" ]; then
+              for attempt in 1 2 3 4 5; do
+                CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:${PORT}/" || echo 000)
+                if [ "$CODE" = "200" ] || [ "$CODE" = "302" ] || [ "$CODE" = "401" ]; then
+                  echo "port $PORT responded (HTTP $CODE) on attempt $attempt"
+                  HEALTHY=1
+                  break
+                fi
+                echo "attempt $attempt: HTTP $CODE - retrying"
+                sleep 4
+              done
+            fi
+
+            if [ "$HEALTHY" -ne 1 ]; then
+              echo "::error::health check failed - rolling back to $PREVIOUS"
+              cd "$REPO_ROOT"
+              git switch --detach "$PREVIOUS"
+              cd "$APP_ROOT"
+              if echo "$CHANGED" | grep -qE '^whatsapp-api/package(-lock)?\.json$'; then
+                npm ci --omit=dev
+              fi
+              pm2 restart "$APP_PROCESS" --update-env
+              echo "::error::production was returned to $PREVIOUS and is on a DETACHED HEAD."
+              echo "::error::after fixing main, run on the VPS: cd $REPO_ROOT && git switch main"
+              exit 1
+            fi
+
+            # ---------------------------------------------------------------
+            # 9. Persist the process list so a VPS reboot restores it.
+            # ---------------------------------------------------------------
+            pm2 save
+
+            echo "deployed $DEPLOYED successfully"

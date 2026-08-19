@@ -23,7 +23,7 @@ import {
   createOrdersFromCustomerMessage,
   processAgentDocumentMessage,
 } from "./signcopy/workflow.js";
-import { extractAudioText, extractPdfText, extractImageText, extractImageTextEasyOcr } from "./signcopy/documentProcessor.js";
+import { extractAudioText, extractPdfText, extractImageText, extractImageTextEasyOcr, extractPdfTextDeep } from "./signcopy/documentProcessor.js";
 import DynamicOrder from "../models/dynamicOrderModel.js";
 import AgentCustomerProfile from "../models/agentCustomerProfileModel.js";
 import LidMap from "../models/lidMapModel.js";
@@ -342,6 +342,95 @@ const MESSAGE_WRAPPER_KEYS = [
   "documentWithCaptionMessage",
   "editedMessage",
 ];
+
+// The automation belongs to exactly one workflow: customer -> CEO -> vendor ->
+// customer. Everything outside it is ignored outright — no OCR, no order
+// creation, no matching, no duplicate check, no delivery, and no copy into the
+// review group.
+//
+// That last one is why the check has to run before OCR rather than at the
+// delivery gate. A file picked up in an unrelated group that matches nothing is
+// "unmatched", and the unmatched path forwards the file onward — so a lax scope
+// does not merely waste OCR, it copies a stranger's documents into the review
+// group. Skipping the work is also the only way to honour "do not process".
+//
+// In scope:  any direct chat (customer <-> CEO, vendor <-> CEO)
+//            the vendor group configured on the session
+// Ignored:   every other group, including the review/unmatched group itself,
+//            whose contents are this system's own output
+//
+// With no vendor group configured, group traffic is ignored entirely. That is
+// the requested behaviour, and it is announced loudly rather than silently:
+// set the vendor group in the dashboard to re-enable group delivery.
+const workflowScopeCache = new Map(); // "<userId>:<sessionId>" -> { vendorGroupJid, reviewJid, loadedAt }
+const WORKFLOW_SCOPE_TTL_MS = 15000;
+const announcedOutOfScope = new Set();
+
+async function isWorkflowChat(userId, sessionId, chatJid) {
+  const jid = String(chatJid || "");
+  if (!jid.endsWith("@g.us")) return true;
+
+  const key = `${userId}:${sessionId}`;
+  let scope = workflowScopeCache.get(key);
+
+  if (!scope || Date.now() - scope.loadedAt > WORKFLOW_SCOPE_TTL_MS) {
+    try {
+      const session = await sessionModel.findOne(
+        { _id: sessionId, user: String(userId) },
+        "vendorGroupJid undeliveredTarget"
+      ).lean();
+
+      const reviewTarget = String(session?.undeliveredTarget || "").trim();
+
+      scope = {
+        vendorGroupJid: String(session?.vendorGroupJid || "").trim(),
+        reviewJid: reviewTarget.endsWith("@g.us") ? reviewTarget : "",
+        loadedAt: Date.now(),
+      };
+      workflowScopeCache.set(key, scope);
+    } catch (err) {
+      console.error(`[Scope] could not read session scope [Session: ${sessionId}]:`, err.message);
+      // Fail closed for groups: an unreadable configuration must not be treated
+      // as permission to process a chat that may be unrelated.
+      return false;
+    }
+  }
+
+  const decision = decideWorkflowScope({
+    chatJid: jid,
+    vendorGroupJid: scope.vendorGroupJid,
+    reviewJid: scope.reviewJid,
+  });
+
+  // Log each unfamiliar group once per process so a misconfiguration is
+  // visible without flooding the log on every message.
+  const noticeKey = `${key}:${jid}`;
+  if (!decision.allowed && !announcedOutOfScope.has(noticeKey)) {
+    announcedOutOfScope.add(noticeKey);
+    console.warn(`[Scope] ignoring group ${jid}: ${decision.reason}`);
+  }
+  return decision.allowed;
+}
+
+// The scope rule itself, with no database or session state, so it can be
+// tested directly. isWorkflowChat() supplies the configuration.
+export function decideWorkflowScope({ chatJid = "", vendorGroupJid = "", reviewJid = "" } = {}) {
+  const jid = String(chatJid || "");
+
+  if (!jid.endsWith("@g.us")) {
+    return { allowed: true, reason: "direct chat" };
+  }
+  if (reviewJid && jid === reviewJid) {
+    return { allowed: false, reason: "this is the review group; its own output is not reprocessed" };
+  }
+  if (!vendorGroupJid) {
+    return { allowed: false, reason: "no vendor group is configured for this session - set one in the dashboard to enable group delivery" };
+  }
+  if (jid === vendorGroupJid) {
+    return { allowed: true, reason: "configured vendor group" };
+  }
+  return { allowed: false, reason: `not the configured vendor group (${vendorGroupJid})` };
+}
 
 // Keep the dashboard-managed vendor list current. isVendor() is synchronous and
 // runs on every message, so the set is cached; this tops it up on a short TTL
@@ -928,6 +1017,9 @@ export async function initSession(userId, sessionId) {
         try {
           // Determine if message came from a LID (linked device) - not a real phone number
           const chatJid = msg?.key?.remoteJid || "";
+          // Decided once, before any work: an out-of-scope chat is not OCR'd,
+          // not matched, not delivered and never forwarded to the review group.
+          const inWorkflowScope = await isWorkflowChat(userId, sessionId, chatJid);
           const remoteJid = msg?.key?.participant || chatJid || "";
           const isLidJid = remoteJid.endsWith("@lid");
 
@@ -1101,7 +1193,12 @@ export async function initSession(userId, sessionId) {
                    const isImageLike = mimeType.startsWith("image/")
                      || /\.(jpe?g|png|webp|heic|heif|bmp|tiff?|gif)$/u.test(lowerName);
 
-                   if (msgType === "documentMessage" && isPdf) {
+                   // The media is still stored so conversation history stays
+                   // complete, but nothing is read out of it outside the
+                   // customer -> CEO -> vendor workflow.
+                   if (!inWorkflowScope) {
+                     extraction = { text: "", method: "SKIPPED_OUT_OF_SCOPE" };
+                   } else if (msgType === "documentMessage" && isPdf) {
                      extraction = await extractPdfText(savedMediaPath);
                    } else if (msgType === "imageMessage" || msgType === "stickerMessage" || (msgType === "documentMessage" && isImageLike)) {
                      extraction = await extractImageText(savedMediaPath);
@@ -1210,7 +1307,12 @@ export async function initSession(userId, sessionId) {
                      toVendor: vendorToVendorTarget,
                    },
                  });
-               } else if (mediaMatch && senderIsVendor && (mediaMeta?.ocrText || mediaMeta?.fileName || chatJid.endsWith("@g.us"))) {
+               } else if (
+                 mediaMatch
+                 && senderIsVendor
+                 && inWorkflowScope
+                 && (mediaMeta?.ocrText || mediaMeta?.fileName || chatJid.endsWith("@g.us"))
+               ) {
                  let ocrIdentityConflict = null;
                  let matches = await findDynamicOrderMatches({ userId, sessionId, evidenceText: searchable, filenameExact, vendorPhone: senderPhone, revisionDone });
                  let match = matches[0];
@@ -1250,24 +1352,37 @@ export async function initSession(userId, sessionId) {
                    match = matches[0];
                  }
 
-                 // Existing OCR did not produce a safe match.
-                 // Run the heavier EasyOCR engine only now.
+                 // Existing OCR did not produce a safe match. Run the heavier
+                 // engines only now.
+                 //
+                 // A PDF gets the same treatment an image does: its pages are
+                 // rendered and put through the multi-variant local engine and
+                 // EasyOCR, then cross-checked for a date-of-birth conflict.
+                 // Previously this whole stage was image-only, so a scanned PDF
+                 // had neither the second chance at a match nor the conflict
+                 // guard that refuses delivery when two engines disagree.
+                 const secondPassIsPdf = msgType === "documentMessage" && (
+                   String(mediaMeta?.mimeType || "").includes("pdf")
+                   || /\.pdf$/iu.test(String(mediaMeta?.fileName || ""))
+                 );
+                 const secondPassIsImage = msgType === "imageMessage"
+                   || String(mediaMeta?.mimeType || "").startsWith("image/")
+                   || /\.(jpe?g|png|webp|heic|heif|bmp|tiff?|gif)$/iu.test(
+                     String(mediaMeta?.fileName || "")
+                   );
+
                  if (
                    !match
                    && savedMediaPath
-                   && (
-                     msgType === "imageMessage"
-                     || String(mediaMeta?.mimeType || "").startsWith("image/")
-                     || /\.(jpe?g|png|webp|heic|heif|bmp|tiff?|gif)$/iu.test(
-                       String(mediaMeta?.fileName || "")
-                     )
-                   )
+                   && (secondPassIsImage || secondPassIsPdf)
                  ) {
                    console.log(
-                     `[EasyOCR Fallback] no safe primary OCR match; trying EasyOCR for ${mediaMeta?.fileName || "image"}`
+                     `[OCR Fallback] no safe primary OCR match; running ${secondPassIsPdf ? "deep PDF" : "EasyOCR"} pass for ${mediaMeta?.fileName || "file"}`
                    );
 
-                   const easyExtraction = await extractImageTextEasyOcr(savedMediaPath);
+                   const easyExtraction = secondPassIsPdf
+                     ? await extractPdfTextDeep(savedMediaPath)
+                     : await extractImageTextEasyOcr(savedMediaPath);
                    const easyText = String(easyExtraction?.text || "").trim();
 
                    if (easyText) {
@@ -1969,7 +2084,10 @@ export async function initSession(userId, sessionId) {
                // digits, a valid MSISDN length — so rely on the JID itself.
                const senderIsUnresolvedLid = isLidJid && normalizePhone(senderPhone) === normalizePhone(rawNum);
                await refreshDbVendors(userId, sessionId);
-               if (senderIsUnresolvedLid) {
+               if (!inWorkflowScope) {
+                 // Customer identification is one of the things an unrelated
+                 // chat must not trigger.
+               } else if (senderIsUnresolvedLid) {
                  console.warn(`[Order] sender ${rawNum} is an unresolved LID - no order created (cannot be delivered to)`);
                } else if (isVendor(userId, sessionId, senderPhone)) {
                  console.log(`[Vendors] ${senderPhone} (${vendorName(userId, sessionId, senderPhone)}) is a vendor - no order created`);
